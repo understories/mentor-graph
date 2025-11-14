@@ -1,0 +1,87 @@
+import { eq } from "@arkiv-network/sdk/query"
+import { getPublicClient, getWalletClient } from "./client"
+
+export type Ask = {
+  key: string;
+  wallet: string;
+  skill: string;
+  spaceId: string;
+  createdAt: string;
+  status: string;
+  message: string;
+  txHash?: string;
+}
+
+export async function createAsk({
+  wallet,
+  skill,
+  message,
+}: {
+  wallet: string;
+  skill: string;
+  message: string;
+}): Promise<{ key: string; txHash: string }> {
+  const walletClient = getWalletClient();
+  const enc = new TextEncoder();
+  const spaceId = 'local-dev';
+  const status = 'open';
+  const createdAt = new Date().toISOString();
+
+  const { entityKey, txHash } = await walletClient.createEntity({
+    payload: enc.encode(JSON.stringify({
+      message,
+    })),
+    contentType: 'application/json',
+    attributes: [
+      { key: 'type', value: 'ask' },
+      { key: 'wallet', value: wallet },
+      { key: 'skill', value: skill },
+      { key: 'spaceId', value: spaceId },
+      { key: 'createdAt', value: createdAt },
+      { key: 'status', value: status },
+    ],
+    expiresIn: 3600, // 1 hour
+  });
+
+  return { key: entityKey, txHash };
+}
+
+export async function listAsks(): Promise<Ask[]> {
+  const publicClient = getPublicClient();
+  const query = publicClient.buildQuery();
+  const result = await query
+    .where(eq('type', 'ask'))
+    .withAttributes(true)
+    .withPayload(true)
+    .limit(100)
+    .fetch();
+
+  return result.entities.map((entity: any) => {
+    let payload: any = {};
+    try {
+      if (entity.payload) {
+        const decoded = entity.payload instanceof Uint8Array
+          ? new TextDecoder().decode(entity.payload)
+          : typeof entity.payload === 'string'
+          ? entity.payload
+          : JSON.stringify(entity.payload);
+        payload = JSON.parse(decoded);
+      }
+    } catch (e) {
+      console.error('Error decoding payload:', e);
+    }
+
+    const attrs = entity.attributes || {};
+    return {
+      key: entity.key,
+      wallet: attrs.wallet || '',
+      skill: attrs.skill || '',
+      spaceId: attrs.spaceId || 'local-dev',
+      createdAt: attrs.createdAt || '',
+      status: attrs.status || 'open',
+      message: payload.message || '',
+      txHash: payload.txHash,
+    };
+  });
+}
+
