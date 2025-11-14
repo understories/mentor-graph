@@ -138,3 +138,8 @@ export async function listUserProfilesForWallet(wallet: string): Promise<UserPro
   });
 }
 
+export async function getProfileByWallet(wallet: string): Promise<UserProfile | null> {
+  const profiles = await listUserProfilesForWallet(wallet);
+  return profiles.length > 0 ? profiles[0] : null;
+}
+
