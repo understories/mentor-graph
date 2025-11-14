@@ -16,18 +16,15 @@ export async function createUserProfile({
   displayName,
   skills = '',
   timezone = '',
-  spaceId = 'local-dev',
-  createdAt,
 }: {
   displayName: string;
   skills?: string;
   timezone?: string;
-  spaceId?: string;
-  createdAt?: string;
 }): Promise<{ key: string; txHash: string }> {
   const walletClient = getWalletClient();
   const enc = new TextEncoder();
-  const timestamp = createdAt || new Date().toISOString();
+  const spaceId = 'local-dev';
+  const createdAt = new Date().toISOString();
 
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: enc.encode(JSON.stringify({
@@ -35,7 +32,7 @@ export async function createUserProfile({
       skills,
       timezone,
       spaceId,
-      createdAt: timestamp,
+      createdAt,
     })),
     contentType: 'application/json',
     attributes: [
@@ -45,7 +42,7 @@ export async function createUserProfile({
       { key: 'skills', value: skills },
       { key: 'timezone', value: timezone },
       { key: 'spaceId', value: spaceId },
-      { key: 'createdAt', value: timestamp },
+      { key: 'createdAt', value: createdAt },
     ],
     expiresIn: 31536000, // 1 year
   });
