@@ -6,7 +6,7 @@ export default async function handler(req: any, res: any) {
       const profiles = await listUserProfiles();
       res.json(profiles);
     } else if (req.method === 'POST') {
-      const { displayName, skills, timezone } = req.body;
+      const { displayName, skills, timezone, spaceId } = req.body;
       
       if (!displayName) {
         return res.status(400).json({ error: 'displayName is required' });
@@ -15,7 +15,8 @@ export default async function handler(req: any, res: any) {
       const { key, txHash } = await createUserProfile(
         displayName,
         skills || '',
-        timezone || ''
+        timezone || '',
+        spaceId || 'local-dev'
       );
 
       res.json({ key, txHash });

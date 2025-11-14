@@ -7,22 +7,29 @@ export type UserProfile = {
   displayName: string;
   skills: string;
   timezone: string;
+  spaceId: string;
+  createdAt?: string;
   txHash?: string;
 }
 
 export async function createUserProfile(
   displayName: string,
   skills: string = '',
-  timezone: string = ''
+  timezone: string = '',
+  spaceId: string = 'local-dev',
+  createdAt?: string
 ): Promise<{ key: string; txHash: string }> {
   const walletClient = getWalletClient();
   const enc = new TextEncoder();
+  const timestamp = createdAt || new Date().toISOString();
 
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: enc.encode(JSON.stringify({
       displayName,
       skills,
       timezone,
+      spaceId,
+      createdAt: timestamp,
     })),
     contentType: 'application/json',
     attributes: [
@@ -31,6 +38,8 @@ export async function createUserProfile(
       { key: 'displayName', value: displayName },
       { key: 'skills', value: skills },
       { key: 'timezone', value: timezone },
+      { key: 'spaceId', value: spaceId },
+      { key: 'createdAt', value: timestamp },
     ],
     expiresIn: 31536000, // 1 year
   });
@@ -70,6 +79,9 @@ export async function listUserProfiles(): Promise<UserProfile[]> {
       displayName: attrs.displayName || payload.displayName || '',
       skills: attrs.skills || payload.skills || '',
       timezone: attrs.timezone || payload.timezone || '',
+      spaceId: attrs.spaceId || payload.spaceId || 'local-dev',
+      createdAt: attrs.createdAt || payload.createdAt,
+      txHash: payload.txHash,
     };
   });
 }
