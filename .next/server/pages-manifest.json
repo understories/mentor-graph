@@ -2,7 +2,8 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/profiles": "pages/profiles.js",
   "/": "pages/index.js",
-  "/api/profiles": "pages/api/profiles.js"
+  "/profiles": "pages/profiles.js",
+  "/api/profiles": "pages/api/profiles.js",
+  "/api/profile": "pages/api/profile.js"
 }
