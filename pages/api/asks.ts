@@ -1,21 +1,23 @@
-import { createAsk, listAsks } from "../../src/arkiv/asks"
+import { createAsk, listAsksForWallet } from "../../src/arkiv/asks"
+import { CURRENT_WALLET, ARKIV_PRIVATE_KEY } from "../../src/config"
 
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
-      const asks = await listAsks();
+      const asks = await listAsksForWallet(CURRENT_WALLET);
       res.json(asks);
     } else if (req.method === 'POST') {
-      const { wallet, skill, message } = req.body;
+      const { skill, message } = req.body;
       
-      if (!wallet || !skill || !message) {
-        return res.status(400).json({ error: 'wallet, skill, and message are required' });
+      if (!skill || !message) {
+        return res.status(400).json({ error: 'skill and message are required' });
       }
 
       const { key, txHash } = await createAsk({
-        wallet,
+        wallet: CURRENT_WALLET,
         skill,
         message,
+        privateKey: ARKIV_PRIVATE_KEY,
       });
 
       res.json({ key, txHash });

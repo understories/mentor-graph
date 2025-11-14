@@ -1,5 +1,5 @@
 import { eq } from "@arkiv-network/sdk/query"
-import { getPublicClient, getWalletClient } from "./client"
+import { getPublicClient, getWalletClientFromPrivateKey } from "./client"
 
 export type UserProfile = {
   key: string;
@@ -13,15 +13,19 @@ export type UserProfile = {
 }
 
 export async function createUserProfile({
+  wallet,
   displayName,
   skills = '',
   timezone = '',
+  privateKey,
 }: {
+  wallet: string;
   displayName: string;
   skills?: string;
   timezone?: string;
+  privateKey: `0x${string}`;
 }): Promise<{ key: string; txHash: string }> {
-  const walletClient = getWalletClient();
+  const walletClient = getWalletClientFromPrivateKey(privateKey);
   const enc = new TextEncoder();
   const spaceId = 'local-dev';
   const createdAt = new Date().toISOString();
@@ -37,7 +41,7 @@ export async function createUserProfile({
     contentType: 'application/json',
     attributes: [
       { key: 'type', value: 'user_profile' },
-      { key: 'wallet', value: walletClient.account.address },
+      { key: 'wallet', value: wallet },
       { key: 'displayName', value: displayName },
       { key: 'skills', value: skills },
       { key: 'timezone', value: timezone },
@@ -60,6 +64,46 @@ export async function listUserProfiles(skill?: string): Promise<UserProfile[]> {
   }
   
   const result = await queryBuilder
+    .withAttributes(true)
+    .withPayload(true)
+    .limit(100)
+    .fetch();
+
+  return result.entities.map((entity: any) => {
+    let payload: any = {};
+    try {
+      if (entity.payload) {
+        const decoded = entity.payload instanceof Uint8Array
+          ? new TextDecoder().decode(entity.payload)
+          : typeof entity.payload === 'string'
+          ? entity.payload
+          : JSON.stringify(entity.payload);
+        payload = JSON.parse(decoded);
+      }
+    } catch (e) {
+      console.error('Error decoding payload:', e);
+    }
+
+    const attrs = entity.attributes || {};
+    return {
+      key: entity.key,
+      wallet: attrs.wallet || payload.wallet || '',
+      displayName: attrs.displayName || payload.displayName || '',
+      skills: attrs.skills || payload.skills || '',
+      timezone: attrs.timezone || payload.timezone || '',
+      spaceId: attrs.spaceId || payload.spaceId || 'local-dev',
+      createdAt: attrs.createdAt || payload.createdAt,
+      txHash: payload.txHash,
+    };
+  });
+}
+
+export async function listUserProfilesForWallet(wallet: string): Promise<UserProfile[]> {
+  const publicClient = getPublicClient();
+  const query = publicClient.buildQuery();
+  const result = await query
+    .where(eq('type', 'user_profile'))
+    .where(eq('wallet', wallet))
     .withAttributes(true)
     .withPayload(true)
     .limit(100)

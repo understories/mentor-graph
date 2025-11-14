@@ -1,22 +1,24 @@
-import { createOffer, listOffers } from "../../src/arkiv/offers"
+import { createOffer, listOffersForWallet } from "../../src/arkiv/offers"
+import { CURRENT_WALLET, ARKIV_PRIVATE_KEY } from "../../src/config"
 
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
-      const offers = await listOffers();
+      const offers = await listOffersForWallet(CURRENT_WALLET);
       res.json(offers);
     } else if (req.method === 'POST') {
-      const { wallet, skill, message, availabilityWindow } = req.body;
+      const { skill, message, availabilityWindow } = req.body;
       
-      if (!wallet || !skill || !message || !availabilityWindow) {
-        return res.status(400).json({ error: 'wallet, skill, message, and availabilityWindow are required' });
+      if (!skill || !message || !availabilityWindow) {
+        return res.status(400).json({ error: 'skill, message, and availabilityWindow are required' });
       }
 
       const { key, txHash } = await createOffer({
-        wallet,
+        wallet: CURRENT_WALLET,
         skill,
         message,
         availabilityWindow,
+        privateKey: ARKIV_PRIVATE_KEY,
       });
 
       res.json({ key, txHash });

@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { createPublicClient, createWalletClient, http } from "@arkiv-network/sdk"
 import { privateKeyToAccount } from "@arkiv-network/sdk/accounts"
 import { mendoza } from "@arkiv-network/sdk/chains"
@@ -10,15 +9,11 @@ export function getPublicClient() {
   });
 }
 
-export function getWalletClient() {
-  const privateKey = process.env.ARKIV_PRIVATE_KEY;
-  if (!privateKey) {
-    throw new Error('Missing env var: ARKIV_PRIVATE_KEY');
-  }
+export function getWalletClientFromPrivateKey(privateKey: `0x${string}`) {
   return createWalletClient({
     chain: mendoza,
     transport: http(),
-    account: privateKeyToAccount(privateKey as `0x${string}`),
+    account: privateKeyToAccount(privateKey),
   });
 }
 

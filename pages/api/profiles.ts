@@ -1,22 +1,24 @@
-import { createUserProfile, listUserProfiles } from "../../src/arkiv/profiles"
+import { createUserProfile, listUserProfilesForWallet } from "../../src/arkiv/profiles"
+import { CURRENT_WALLET, ARKIV_PRIVATE_KEY } from "../../src/config"
 
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
-      const skill = req.query.skill as string | undefined;
-      const profiles = await listUserProfiles(skill);
+      const profiles = await listUserProfilesForWallet(CURRENT_WALLET);
       res.json(profiles);
     } else if (req.method === 'POST') {
-      const { displayName, skills, timezone, spaceId } = req.body;
+      const { displayName, skills, timezone } = req.body;
       
       if (!displayName) {
         return res.status(400).json({ error: 'displayName is required' });
       }
 
       const { key, txHash } = await createUserProfile({
+        wallet: CURRENT_WALLET,
         displayName,
         skills: skills || '',
         timezone: timezone || '',
+        privateKey: ARKIV_PRIVATE_KEY,
       });
 
       res.json({ key, txHash });
