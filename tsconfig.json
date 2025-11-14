@@ -2,8 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
+    "jsx": "preserve",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -11,9 +14,16 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "allowJs": true,
+    "incremental": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", ".next"]
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next"
+  ]
 }
-
