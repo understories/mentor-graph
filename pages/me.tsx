@@ -340,10 +340,10 @@ export default function Me() {
             <label>
               Expiration (default: 1 hour):
               <input type="number" name="expiresIn" min="0.1" step="0.1" placeholder="1" style={{ marginLeft: '10px', width: '80px' }} />
-              <select name="expiresInUnit" style={{ marginLeft: '5px' }}>
+              <select name="expiresInUnit" defaultValue="hours" style={{ marginLeft: '5px' }}>
                 <option value="seconds">seconds</option>
                 <option value="minutes">minutes</option>
-                <option value="hours" selected>hours</option>
+                <option value="hours">hours</option>
                 <option value="days">days</option>
               </select>
             </label>
@@ -421,10 +421,10 @@ export default function Me() {
             <label>
               Expiration (default: 2 hours):
               <input type="number" name="expiresIn" min="0.1" step="0.1" placeholder="2" style={{ marginLeft: '10px', width: '80px' }} />
-              <select name="expiresInUnit" style={{ marginLeft: '5px' }}>
+              <select name="expiresInUnit" defaultValue="hours" style={{ marginLeft: '5px' }}>
                 <option value="seconds">seconds</option>
                 <option value="minutes">minutes</option>
-                <option value="hours" selected>hours</option>
+                <option value="hours">hours</option>
                 <option value="days">days</option>
               </select>
             </label>

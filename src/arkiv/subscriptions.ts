@@ -1,8 +1,8 @@
-import { createPublicClient, ws } from "@arkiv-network/sdk"
+import { createPublicClient, http } from "@arkiv-network/sdk"
 import { mendoza } from "@arkiv-network/sdk/chains"
-import { eq } from "@arkiv-network/sdk/query"
 import { Ask, ASK_TTL_SECONDS } from "./asks"
 import { Offer, OFFER_TTL_SECONDS } from "./offers"
+import { getPublicClient } from "./client"
 
 function mapEntityToAsk(entity: any, txHashMap: Record<string, string> = {}): Ask {
   let payload: any = {};
@@ -80,138 +80,148 @@ function mapEntityToOffer(entity: any, txHashMap: Record<string, string> = {}): 
 }
 
 export function subscribeToAsks(onAsk: (ask: Ask) => void): () => void {
-  const wsUrl = process.env.ARKIV_WS_URL || process.env.NEXT_PUBLIC_ARKIV_WS_URL;
-  if (!wsUrl) {
-    console.error('ARKIV_WS_URL not configured');
-    return () => {};
-  }
-
-  const publicClient = createPublicClient({
-    chain: mendoza,
-    transport: ws(wsUrl),
-  });
-
+  const publicClient = getPublicClient();
   const txHashMap: Record<string, string> = {};
 
-  const unsubscribe = publicClient.watchEntities({
-    query: publicClient.buildQuery()
-      .where(eq('type', 'ask'))
-      .where(eq('status', 'open'))
-      .withAttributes(true)
-      .withPayload(true),
-    onEntity: (entity: any) => {
-      const ask = mapEntityToAsk(entity, txHashMap);
-      onAsk(ask);
-    },
-  });
+  let unsubscribeFn: (() => void) | null = null;
 
-  const unsubscribeTxHash = publicClient.watchEntities({
-    query: publicClient.buildQuery()
-      .where(eq('type', 'ask_txhash'))
-      .withAttributes(true)
-      .withPayload(true),
-    onEntity: (entity: any) => {
-      const attrs = entity.attributes || {};
-      const getAttr = (key: string) => {
-        if (Array.isArray(attrs)) {
-          const attr = attrs.find((a: any) => a.key === key);
-          return attr?.value || '';
-        }
-        return attrs[key] || '';
-      };
-      const askKey = getAttr('askKey');
-      if (askKey) {
-        let payload: any = {};
-        try {
-          if (entity.payload) {
-            const decoded = entity.payload instanceof Uint8Array
-              ? new TextDecoder().decode(entity.payload)
-              : typeof entity.payload === 'string'
-              ? entity.payload
-              : JSON.stringify(entity.payload);
-            payload = JSON.parse(decoded);
+  console.log('[subscribeToAsks] Starting subscription...');
+  publicClient.subscribeEntityEvents({
+    onEntityCreated: async (event) => {
+      try {
+        const entity = await publicClient.getEntity(event.entityKey);
+        if (!entity) return;
+
+        const attrs = entity.attributes || {};
+        const getAttr = (key: string) => {
+          if (Array.isArray(attrs)) {
+            const attr = attrs.find((a: any) => a.key === key);
+            return attr?.value || '';
           }
-        } catch (e) {
-          console.error('Error decoding txHash payload:', e);
+          return attrs[key] || '';
+        };
+
+        const entityType = getAttr('type');
+        const entityStatus = getAttr('status');
+
+        if (entityType === 'ask' && entityStatus === 'open') {
+          console.log('[subscribeToAsks] New ask detected:', entity.key);
+          const ask = mapEntityToAsk(entity, txHashMap);
+          onAsk(ask);
         }
-        if (payload.txHash) {
-          txHashMap[askKey] = payload.txHash;
+
+        if (entityType === 'ask_txhash') {
+          const askKey = getAttr('askKey');
+          if (askKey) {
+            let payload: any = {};
+            try {
+              if (entity.payload) {
+                const decoded = entity.payload instanceof Uint8Array
+                  ? new TextDecoder().decode(entity.payload)
+                  : typeof entity.payload === 'string'
+                  ? entity.payload
+                  : JSON.stringify(entity.payload);
+                payload = JSON.parse(decoded);
+              }
+            } catch (e) {
+              console.error('Error decoding txHash payload:', e);
+            }
+            if (payload.txHash) {
+              txHashMap[askKey] = payload.txHash;
+            }
+          }
         }
+      } catch (error) {
+        console.error('Error processing entity created event:', error);
       }
     },
+    onError: (error) => {
+      console.error('Error in subscribeToAsks:', error);
+    },
+  }).then((unsubscribe) => {
+    console.log('[subscribeToAsks] Subscription established');
+    unsubscribeFn = unsubscribe;
+  }).catch((error) => {
+    console.error('[subscribeToAsks] Error subscribing:', error);
   });
 
   return () => {
-    unsubscribe();
-    unsubscribeTxHash();
+    if (unsubscribeFn) {
+      unsubscribeFn();
+    }
   };
 }
 
 export function subscribeToOffers(onOffer: (offer: Offer) => void): () => void {
-  const wsUrl = process.env.ARKIV_WS_URL || process.env.NEXT_PUBLIC_ARKIV_WS_URL;
-  if (!wsUrl) {
-    console.error('ARKIV_WS_URL not configured');
-    return () => {};
-  }
-
-  const publicClient = createPublicClient({
-    chain: mendoza,
-    transport: ws(wsUrl),
-  });
-
+  const publicClient = getPublicClient();
   const txHashMap: Record<string, string> = {};
 
-  const unsubscribe = publicClient.watchEntities({
-    query: publicClient.buildQuery()
-      .where(eq('type', 'offer'))
-      .where(eq('status', 'active'))
-      .withAttributes(true)
-      .withPayload(true),
-    onEntity: (entity: any) => {
-      const offer = mapEntityToOffer(entity, txHashMap);
-      onOffer(offer);
-    },
-  });
+  let unsubscribeFn: (() => void) | null = null;
 
-  const unsubscribeTxHash = publicClient.watchEntities({
-    query: publicClient.buildQuery()
-      .where(eq('type', 'offer_txhash'))
-      .withAttributes(true)
-      .withPayload(true),
-    onEntity: (entity: any) => {
-      const attrs = entity.attributes || {};
-      const getAttr = (key: string) => {
-        if (Array.isArray(attrs)) {
-          const attr = attrs.find((a: any) => a.key === key);
-          return attr?.value || '';
-        }
-        return attrs[key] || '';
-      };
-      const offerKey = getAttr('offerKey');
-      if (offerKey) {
-        let payload: any = {};
-        try {
-          if (entity.payload) {
-            const decoded = entity.payload instanceof Uint8Array
-              ? new TextDecoder().decode(entity.payload)
-              : typeof entity.payload === 'string'
-              ? entity.payload
-              : JSON.stringify(entity.payload);
-            payload = JSON.parse(decoded);
+  console.log('[subscribeToOffers] Starting subscription...');
+  publicClient.subscribeEntityEvents({
+    onEntityCreated: async (event) => {
+      try {
+        const entity = await publicClient.getEntity(event.entityKey);
+        if (!entity) return;
+
+        const attrs = entity.attributes || {};
+        const getAttr = (key: string) => {
+          if (Array.isArray(attrs)) {
+            const attr = attrs.find((a: any) => a.key === key);
+            return attr?.value || '';
           }
-        } catch (e) {
-          console.error('Error decoding txHash payload:', e);
+          return attrs[key] || '';
+        };
+
+        const entityType = getAttr('type');
+        const entityStatus = getAttr('status');
+
+        if (entityType === 'offer' && entityStatus === 'active') {
+          console.log('[subscribeToOffers] New offer detected:', entity.key);
+          const offer = mapEntityToOffer(entity, txHashMap);
+          onOffer(offer);
         }
-        if (payload.txHash) {
-          txHashMap[offerKey] = payload.txHash;
+
+        if (entityType === 'offer_txhash') {
+          const offerKey = getAttr('offerKey');
+          if (offerKey) {
+            let payload: any = {};
+            try {
+              if (entity.payload) {
+                const decoded = entity.payload instanceof Uint8Array
+                  ? new TextDecoder().decode(entity.payload)
+                  : typeof entity.payload === 'string'
+                  ? entity.payload
+                  : JSON.stringify(entity.payload);
+                payload = JSON.parse(decoded);
+              }
+            } catch (e) {
+              console.error('Error decoding txHash payload:', e);
+            }
+            if (payload.txHash) {
+              txHashMap[offerKey] = payload.txHash;
+            }
+          }
         }
+      } catch (error) {
+        console.error('Error processing entity created event:', error);
       }
     },
+    onError: (error) => {
+      console.error('Error in subscribeToOffers:', error);
+    },
+  }).then((unsubscribe) => {
+    console.log('[subscribeToOffers] Subscription established');
+    unsubscribeFn = unsubscribe;
+  }).catch((error) => {
+    console.error('[subscribeToOffers] Error subscribing:', error);
   });
 
   return () => {
-    unsubscribe();
-    unsubscribeTxHash();
+    if (unsubscribeFn) {
+      unsubscribeFn();
+    }
   };
 }
 

@@ -12,11 +12,14 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
+  console.log('[SSE] Client connected to /api/subscribe');
+
   let unsubscribeAsks: (() => void) | null = null;
   let unsubscribeOffers: (() => void) | null = null;
 
   const handleAsk = (ask: Ask) => {
     try {
+      console.log('[SSE] Sending ask:', ask.key, ask.skill);
       res.write(`data: ${JSON.stringify({ type: 'ask', entity: ask })}\n\n`);
     } catch (error) {
       console.error('Error writing ask to SSE stream:', error);
@@ -25,14 +28,17 @@ export default async function handler(req: any, res: any) {
 
   const handleOffer = (offer: Offer) => {
     try {
+      console.log('[SSE] Sending offer:', offer.key, offer.skill);
       res.write(`data: ${JSON.stringify({ type: 'offer', entity: offer })}\n\n`);
     } catch (error) {
       console.error('Error writing offer to SSE stream:', error);
     }
   };
 
+  console.log('[SSE] Starting subscriptions...');
   unsubscribeAsks = subscribeToAsks(handleAsk);
   unsubscribeOffers = subscribeToOffers(handleOffer);
+  console.log('[SSE] Subscriptions started');
 
   req.on('close', () => {
     if (unsubscribeAsks) {
