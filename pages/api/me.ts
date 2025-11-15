@@ -8,25 +8,28 @@ import { CURRENT_WALLET, ARKIV_PRIVATE_KEY } from "../../src/config"
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
+      // Get wallet address from query param, fallback to CURRENT_WALLET for backward compatibility
+      const wallet = (req.query.wallet as string) || CURRENT_WALLET;
+      
       const [profile, asks, offers, sessions, feedback] = await Promise.all([
-        getProfileByWallet(CURRENT_WALLET),
-        listAsksForWallet(CURRENT_WALLET),
-        listOffersForWallet(CURRENT_WALLET),
-        listSessionsForWallet(CURRENT_WALLET),
-        listFeedbackForWallet(CURRENT_WALLET),
+        getProfileByWallet(wallet),
+        listAsksForWallet(wallet),
+        listOffersForWallet(wallet),
+        listSessionsForWallet(wallet),
+        listFeedbackForWallet(wallet),
       ]);
 
       // Compute reputation metadata from sessions and feedback
       const sessionsCompleted = sessions.filter(s => s.status === 'completed').length;
-      const sessionsGiven = sessions.filter(s => s.mentorWallet === CURRENT_WALLET && s.status === 'completed').length;
-      const sessionsReceived = sessions.filter(s => s.learnerWallet === CURRENT_WALLET && s.status === 'completed').length;
+      const sessionsGiven = sessions.filter(s => s.mentorWallet.toLowerCase() === wallet.toLowerCase() && s.status === 'completed').length;
+      const sessionsReceived = sessions.filter(s => s.learnerWallet.toLowerCase() === wallet.toLowerCase() && s.status === 'completed').length;
       
-      const ratingsForWallet = feedback.filter(f => f.toWallet === CURRENT_WALLET && f.rating).map(f => f.rating!);
+      const ratingsForWallet = feedback.filter(f => f.toWallet.toLowerCase() === wallet.toLowerCase() && f.rating).map(f => f.rating!);
       const avgRating = ratingsForWallet.length > 0 
         ? ratingsForWallet.reduce((sum, r) => sum + r, 0) / ratingsForWallet.length 
         : 0;
       
-      const npsScores = feedback.filter(f => f.toWallet === CURRENT_WALLET && f.npsScore !== undefined).map(f => f.npsScore!);
+      const npsScores = feedback.filter(f => f.toWallet.toLowerCase() === wallet.toLowerCase() && f.npsScore !== undefined).map(f => f.npsScore!);
       const npsScore = npsScores.length > 0
         ? npsScores.reduce((sum, n) => sum + n, 0) / npsScores.length
         : 0;
@@ -43,7 +46,7 @@ export default async function handler(req: any, res: any) {
 
       // Extract peerTestimonials from feedback
       const peerTestimonials = feedback
-        .filter(f => f.toWallet === CURRENT_WALLET && f.text)
+        .filter(f => f.toWallet.toLowerCase() === wallet.toLowerCase() && f.text)
         .map(f => ({
           text: f.text!,
           timestamp: f.createdAt,
@@ -68,7 +71,7 @@ export default async function handler(req: any, res: any) {
       } : null;
 
       res.json({
-        wallet: CURRENT_WALLET,
+        wallet,
         profile: enrichedProfile,
         asks,
         offers,
@@ -76,7 +79,9 @@ export default async function handler(req: any, res: any) {
         feedback,
       });
     } else if (req.method === 'POST') {
-      const { action } = req.body;
+      const { action, wallet: requestWallet } = req.body;
+      // Use wallet from request body, fallback to CURRENT_WALLET for backward compatibility
+      const wallet = requestWallet || CURRENT_WALLET;
 
       if (action === 'createProfile') {
         const { 
@@ -100,7 +105,7 @@ export default async function handler(req: any, res: any) {
           return res.status(400).json({ ok: false, error: 'displayName is required' });
         }
         await createUserProfile({
-          wallet: CURRENT_WALLET,
+          wallet,
           displayName,
           username,
           profileImage,
@@ -141,7 +146,7 @@ export default async function handler(req: any, res: any) {
           return res.status(400).json({ ok: false, error: 'displayName is required' });
         }
         await updateUserProfile({
-          wallet: CURRENT_WALLET,
+          wallet,
           displayName,
           username,
           profileImage,
@@ -165,8 +170,8 @@ export default async function handler(req: any, res: any) {
         if (!skill || !message) {
           return res.status(400).json({ ok: false, error: 'skill and message are required' });
         }
-        const { key, txHash } = await createAsk({
-          wallet: CURRENT_WALLET,
+            const { key, txHash } = await createAsk({
+              wallet,
           skill,
           message,
           privateKey: ARKIV_PRIVATE_KEY,
@@ -178,8 +183,8 @@ export default async function handler(req: any, res: any) {
         if (!skill || !message || !availabilityWindow) {
           return res.status(400).json({ ok: false, error: 'skill, message, and availabilityWindow are required' });
         }
-        const { key, txHash } = await createOffer({
-          wallet: CURRENT_WALLET,
+            const { key, txHash } = await createOffer({
+              wallet,
           skill,
           message,
           availabilityWindow,

@@ -178,6 +178,7 @@ export default function Me() {
   const [txHashMap, setTxHashMap] = useState<Record<string, string>>({});
   const [editingProfile, setEditingProfile] = useState(false);
   const [showArkivWarning, setShowArkivWarning] = useState(false);
+  const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
 
   // Check if user has dismissed the warning before
   useEffect(() => {
@@ -187,9 +188,28 @@ export default function Me() {
     }
   }, []);
 
-  const fetchMe = async () => {
+  // Check for connected wallet on mount
+  useEffect(() => {
+    const wallet = localStorage.getItem('connectedWallet');
+    if (wallet) {
+      setConnectedWallet(wallet);
+    } else {
+      // If no wallet connected, redirect to home
+      router.push('/');
+    }
+  }, [router]);
+
+  const fetchMe = async (wallet?: string) => {
     try {
-      const res = await fetch('/api/me');
+      const walletToUse = wallet || connectedWallet;
+      if (!walletToUse) {
+        setError('No wallet connected');
+        setLoading(false);
+        return;
+      }
+
+      const url = walletToUse ? `/api/me?wallet=${encodeURIComponent(walletToUse)}` : '/api/me';
+      const res = await fetch(url);
       if (!res.ok) {
         const errorData = await res.json();
         console.error('Error fetching /api/me:', res.status, errorData);
@@ -209,8 +229,16 @@ export default function Me() {
   };
 
   useEffect(() => {
-    fetchMe();
-  }, []);
+    if (connectedWallet) {
+      fetchMe(connectedWallet);
+    }
+  }, [connectedWallet]);
+
+  const handleDisconnect = () => {
+    localStorage.removeItem('connectedWallet');
+    setConnectedWallet(null);
+    router.push('/');
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -273,8 +301,15 @@ export default function Me() {
     const learnerRolesStr = formData.get('learnerRoles') as string;
     const learnerRoles = learnerRolesStr ? learnerRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
+    if (!connectedWallet) {
+      setError('No wallet connected');
+      setSubmitting(null);
+      return;
+    }
+
     const payload = {
       action: 'createProfile',
+      wallet: connectedWallet,
       displayName,
       username: username || undefined,
       profileImage: profileImage || undefined,
@@ -302,7 +337,7 @@ export default function Me() {
       if (res.ok) {
         const result = await res.json();
         console.log('Profile created:', result);
-        fetchMe();
+        fetchMe(connectedWallet);
       } else {
         const errorData = await res.json();
         console.error('Error creating profile:', res.status, errorData);
@@ -358,8 +393,15 @@ export default function Me() {
     const learnerRolesStr = formData.get('learnerRoles') as string;
     const learnerRoles = learnerRolesStr ? learnerRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
+    if (!connectedWallet) {
+      setError('No wallet connected');
+      setSubmitting(null);
+      return;
+    }
+
     const payload = {
       action: 'updateProfile',
+      wallet: connectedWallet,
       displayName,
       username: username || undefined,
       profileImage: profileImage || undefined,
@@ -388,7 +430,7 @@ export default function Me() {
         const result = await res.json();
         console.log('Profile updated:', result);
         setEditingProfile(false);
-        fetchMe();
+        fetchMe(connectedWallet);
       } else {
         const errorData = await res.json();
         console.error('Error updating profile:', res.status, errorData);
@@ -419,8 +461,15 @@ export default function Me() {
       expiresIn = Math.floor(value * multiplier);
     }
 
+    if (!connectedWallet) {
+      setError('No wallet connected');
+      setSubmitting(null);
+      return;
+    }
+
     const payload = {
       action: 'createAsk',
+      wallet: connectedWallet,
       skill,
       message,
       expiresIn: expiresIn || undefined,
@@ -440,7 +489,7 @@ export default function Me() {
           setTxHashMap(prev => ({ ...prev, [result.key]: result.txHash }));
         }
         (e.target as HTMLFormElement).reset();
-        fetchMe();
+        fetchMe(connectedWallet);
       } else {
         const errorData = await res.json();
         console.error('Error creating ask:', res.status, errorData);
@@ -472,8 +521,15 @@ export default function Me() {
       expiresIn = Math.floor(value * multiplier);
     }
 
+    if (!connectedWallet) {
+      setError('No wallet connected');
+      setSubmitting(null);
+      return;
+    }
+
     const payload = {
       action: 'createOffer',
+      wallet: connectedWallet,
       skill,
       message,
       availabilityWindow,
@@ -494,7 +550,7 @@ export default function Me() {
           setTxHashMap(prev => ({ ...prev, [result.key]: result.txHash }));
         }
         (e.target as HTMLFormElement).reset();
-        fetchMe();
+        fetchMe(connectedWallet);
       } else {
         const errorData = await res.json();
         console.error('Error creating offer:', res.status, errorData);
@@ -841,15 +897,52 @@ export default function Me() {
         boxShadow: theme.shadow,
         transition: 'all 0.3s ease'
       }}>
-        <h2 style={{ 
-          color: theme.text,
-          marginTop: 0,
-          transition: 'color 0.3s ease'
-        }}>
-          Wallet & Profile
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ 
+            color: theme.text,
+            marginTop: 0,
+            marginBottom: 0,
+            transition: 'color 0.3s ease'
+          }}>
+            Wallet & Profile
+          </h2>
+          <button
+            onClick={handleDisconnect}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: '500',
+              backgroundColor: darkMode ? '#4a1a1a' : '#ffe6e6',
+              color: darkMode ? '#ff6b6b' : '#cc0000',
+              border: `1px solid ${darkMode ? '#5a2f2f' : '#ff9999'}`,
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = darkMode ? '#5a2a2a' : '#ffcccc';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = darkMode ? '#4a1a1a' : '#ffe6e6';
+            }}
+          >
+            Disconnect Wallet
+          </button>
+        </div>
         <div style={{ marginBottom: '10px', color: theme.text }}>
-          <strong style={{ color: theme.textSecondary }}>Wallet:</strong> {data.wallet}
+          <strong style={{ color: theme.textSecondary }}>Wallet:</strong>{' '}
+          <span 
+            onClick={() => copyToClipboard(data.wallet)}
+            style={{ 
+              cursor: 'pointer',
+              fontFamily: 'monospace',
+              textDecoration: 'underline',
+              color: '#0066cc'
+            }}
+            title="Click to copy"
+          >
+            {shortenWallet(data.wallet)}
+          </span>
         </div>
 
         {data.profile ? (

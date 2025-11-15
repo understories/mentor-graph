@@ -1,12 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { connectWallet } from '../src/wallet';
 
 export default function Home() {
   const router = useRouter();
   const [darkMode, setDarkMode] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleConnect = () => {
-    router.push('/me');
+  const handleConnect = async () => {
+    try {
+      setConnecting(true);
+      setError(null);
+      const address = await connectWallet();
+      // Store wallet address in localStorage for session persistence
+      localStorage.setItem('connectedWallet', address);
+      // Redirect to dashboard
+      router.push('/me');
+    } catch (err: any) {
+      console.error('Failed to connect wallet:', err);
+      setError(err.message || 'Failed to connect wallet');
+      setConnecting(false);
+    }
   };
 
   // Set body background to match theme
@@ -145,27 +160,45 @@ export default function Home() {
           Connect your wallet to load your public mentorship profile and share your asks/offers with your network.
         </p>
 
+        {error && (
+          <div style={{
+            padding: '12px 20px',
+            marginBottom: '20px',
+            backgroundColor: darkMode ? '#4a1a1a' : '#ffe6e6',
+            color: darkMode ? '#ff6b6b' : '#cc0000',
+            borderRadius: '6px',
+            fontSize: '14px',
+          }}>
+            {error}
+          </div>
+        )}
         <button
           onClick={handleConnect}
+          disabled={connecting}
           style={{
             padding: '16px 36px',
             fontSize: '20px',
             fontWeight: '500',
-            backgroundColor: '#0066cc',
+            backgroundColor: connecting ? '#888' : '#0066cc',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: 'pointer',
+            cursor: connecting ? 'not-allowed' : 'pointer',
             transition: 'background-color 0.2s',
+            opacity: connecting ? 0.7 : 1,
           }}
           onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = '#0052a3';
+            if (!connecting) {
+              e.currentTarget.style.backgroundColor = '#0052a3';
+            }
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#0066cc';
+            if (!connecting) {
+              e.currentTarget.style.backgroundColor = '#0066cc';
+            }
           }}
         >
-          Connect Wallet
+          {connecting ? 'Connecting...' : 'Connect Wallet'}
         </button>
       </div>
     </main>
