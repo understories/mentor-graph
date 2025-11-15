@@ -1,5 +1,15 @@
 # Arkiv Network Rate Limit Information
 
+## ✅ Rate Limit Confirmed by Arkiv Team
+
+**Rate Limit: 50 Requests Per Second (RPS)**
+
+This is very generous and should not limit development! With 50 RPS, you can:
+- Make 50 requests per second
+- That's 1 request every 20ms
+- Using 100ms delays = 10 requests/second (well under limit)
+- Seed script will complete in ~2 seconds instead of ~2 minutes
+
 ## Error Details
 
 ### HTTP Response
