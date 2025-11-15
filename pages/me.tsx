@@ -4,9 +4,40 @@ import { useRouter } from 'next/router';
 type Profile = {
   key: string;
   wallet: string;
+  // Core Identity
   displayName: string;
-  skills: string;
+  username?: string;
+  profileImage?: string;
+  bio?: string;
+  bioLong?: string;
   timezone: string;
+  languages?: string[];
+  contactLinks?: {
+    twitter?: string;
+    github?: string;
+    telegram?: string;
+    discord?: string;
+  };
+  // Skills / Roles
+  skills: string;
+  skillsArray?: string[];
+  seniority?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  domainsOfInterest?: string[];
+  mentorRoles?: string[];
+  learnerRoles?: string[];
+  // Reputation
+  sessionsCompleted?: number;
+  sessionsGiven?: number;
+  sessionsReceived?: number;
+  avgRating?: number;
+  npsScore?: number;
+  topSkillsUsage?: Array<{ skill: string; count: number }>;
+  peerTestimonials?: Array<{ text: string; timestamp: string; fromWallet: string }>;
+  trustEdges?: string[];
+  // System
+  lastActiveTimestamp?: string;
+  communityAffiliations?: string[];
+  reputationScore?: number;
   spaceId: string;
   createdAt?: string;
 };
@@ -135,15 +166,58 @@ export default function Me() {
     setSubmitting('profile');
     setError(null);
     const formData = new FormData(e.target as HTMLFormElement);
+    
+    // Core Identity
     const displayName = formData.get('displayName') as string;
-    const skills = formData.get('skills') as string;
+    const username = formData.get('username') as string;
+    const profileImage = formData.get('profileImage') as string;
+    const bio = formData.get('bio') as string;
+    const bioLong = formData.get('bioLong') as string;
     const timezone = formData.get('timezone') as string;
+    const languagesStr = formData.get('languages') as string;
+    const languages = languagesStr ? languagesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    
+    // Contact Links
+    const contactLinks = {
+      twitter: formData.get('contactTwitter') as string || undefined,
+      github: formData.get('contactGithub') as string || undefined,
+      telegram: formData.get('contactTelegram') as string || undefined,
+      discord: formData.get('contactDiscord') as string || undefined,
+    };
+    // Remove undefined values
+    Object.keys(contactLinks).forEach(key => {
+      if (!contactLinks[key as keyof typeof contactLinks]) {
+        delete contactLinks[key as keyof typeof contactLinks];
+      }
+    });
+    
+    // Skills / Roles
+    const skills = formData.get('skills') as string;
+    const skillsArray = skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const seniority = formData.get('seniority') as string || undefined;
+    const domainsStr = formData.get('domainsOfInterest') as string;
+    const domainsOfInterest = domainsStr ? domainsStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const mentorRolesStr = formData.get('mentorRoles') as string;
+    const mentorRoles = mentorRolesStr ? mentorRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const learnerRolesStr = formData.get('learnerRoles') as string;
+    const learnerRoles = learnerRolesStr ? learnerRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
     const payload = {
       action: 'createProfile',
       displayName,
+      username: username || undefined,
+      profileImage: profileImage || undefined,
+      bio: bio || undefined,
+      bioLong: bioLong || undefined,
       skills,
+      skillsArray,
       timezone,
+      languages,
+      contactLinks: Object.keys(contactLinks).length > 0 ? contactLinks : undefined,
+      seniority: seniority as 'beginner' | 'intermediate' | 'advanced' | 'expert' | undefined,
+      domainsOfInterest,
+      mentorRoles,
+      learnerRoles,
     };
     console.log('Creating profile:', payload);
 
@@ -175,15 +249,58 @@ export default function Me() {
     setSubmitting('profile');
     setError(null);
     const formData = new FormData(e.target as HTMLFormElement);
+    
+    // Core Identity
     const displayName = formData.get('displayName') as string;
-    const skills = formData.get('skills') as string;
+    const username = formData.get('username') as string;
+    const profileImage = formData.get('profileImage') as string;
+    const bio = formData.get('bio') as string;
+    const bioLong = formData.get('bioLong') as string;
     const timezone = formData.get('timezone') as string;
+    const languagesStr = formData.get('languages') as string;
+    const languages = languagesStr ? languagesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    
+    // Contact Links
+    const contactLinks = {
+      twitter: formData.get('contactTwitter') as string || undefined,
+      github: formData.get('contactGithub') as string || undefined,
+      telegram: formData.get('contactTelegram') as string || undefined,
+      discord: formData.get('contactDiscord') as string || undefined,
+    };
+    // Remove undefined values
+    Object.keys(contactLinks).forEach(key => {
+      if (!contactLinks[key as keyof typeof contactLinks]) {
+        delete contactLinks[key as keyof typeof contactLinks];
+      }
+    });
+    
+    // Skills / Roles
+    const skills = formData.get('skills') as string;
+    const skillsArray = skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const seniority = formData.get('seniority') as string || undefined;
+    const domainsStr = formData.get('domainsOfInterest') as string;
+    const domainsOfInterest = domainsStr ? domainsStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const mentorRolesStr = formData.get('mentorRoles') as string;
+    const mentorRoles = mentorRolesStr ? mentorRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const learnerRolesStr = formData.get('learnerRoles') as string;
+    const learnerRoles = learnerRolesStr ? learnerRolesStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
     const payload = {
       action: 'updateProfile',
       displayName,
+      username: username || undefined,
+      profileImage: profileImage || undefined,
+      bio: bio || undefined,
+      bioLong: bioLong || undefined,
       skills,
+      skillsArray,
       timezone,
+      languages,
+      contactLinks: Object.keys(contactLinks).length > 0 ? contactLinks : undefined,
+      seniority: seniority as 'beginner' | 'intermediate' | 'advanced' | 'expert' | undefined,
+      domainsOfInterest,
+      mentorRoles,
+      learnerRoles,
     };
     console.log('Updating profile:', payload);
 
@@ -492,23 +609,108 @@ export default function Me() {
           <div>
             {!editingProfile ? (
               <>
-                <div style={{ marginBottom: '10px', color: theme.text }}>
-                  <strong style={{ color: theme.textSecondary }}>Display Name:</strong> {data.profile.displayName}
+                {/* Core Identity */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Core Identity</h3>
+                  <div style={{ marginBottom: '8px', color: theme.text }}>
+                    <strong style={{ color: theme.textSecondary }}>Display Name:</strong> {data.profile.displayName}
+                  </div>
+                  {data.profile.username && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Username:</strong> {data.profile.username}
+                    </div>
+                  )}
+                  {data.profile.bio && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Bio:</strong> {data.profile.bio}
+                    </div>
+                  )}
+                  <div style={{ marginBottom: '8px', color: theme.text }}>
+                    <strong style={{ color: theme.textSecondary }}>Timezone:</strong> {data.profile.timezone}
+                  </div>
+                  {data.profile.languages && data.profile.languages.length > 0 && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Languages:</strong> {data.profile.languages.join(', ')}
+                    </div>
+                  )}
+                  {data.profile.contactLinks && Object.keys(data.profile.contactLinks).length > 0 && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Contact:</strong>{' '}
+                      {data.profile.contactLinks.twitter && <span>Twitter: {data.profile.contactLinks.twitter} </span>}
+                      {data.profile.contactLinks.github && <span>GitHub: {data.profile.contactLinks.github} </span>}
+                      {data.profile.contactLinks.telegram && <span>Telegram: {data.profile.contactLinks.telegram} </span>}
+                      {data.profile.contactLinks.discord && <span>Discord: {data.profile.contactLinks.discord}</span>}
+                    </div>
+                  )}
                 </div>
-                <div style={{ marginBottom: '10px', color: theme.text }}>
-                  <strong style={{ color: theme.textSecondary }}>Skills:</strong> {data.profile.skills}
+
+                {/* Skills / Roles */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Skills & Roles</h3>
+                  <div style={{ marginBottom: '8px', color: theme.text }}>
+                    <strong style={{ color: theme.textSecondary }}>Skills:</strong> {data.profile.skills || (data.profile.skillsArray ? data.profile.skillsArray.join(', ') : 'None')}
+                  </div>
+                  {data.profile.seniority && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Seniority:</strong> {data.profile.seniority}
+                    </div>
+                  )}
+                  {data.profile.domainsOfInterest && data.profile.domainsOfInterest.length > 0 && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Domains of Interest:</strong> {data.profile.domainsOfInterest.join(', ')}
+                    </div>
+                  )}
+                  {data.profile.mentorRoles && data.profile.mentorRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Mentor Roles:</strong> {data.profile.mentorRoles.join(', ')}
+                    </div>
+                  )}
+                  {data.profile.learnerRoles && data.profile.learnerRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Learner Roles:</strong> {data.profile.learnerRoles.join(', ')}
+                    </div>
+                  )}
                 </div>
-                <div style={{ marginBottom: '10px', color: theme.text }}>
-                  <strong style={{ color: theme.textSecondary }}>Timezone:</strong> {data.profile.timezone}
-                </div>
-                <div style={{ marginBottom: '10px', color: theme.text }}>
-                  <strong style={{ color: theme.textSecondary }}>Space ID:</strong> {data.profile.spaceId}
-                </div>
-                {data.profile.createdAt && (
-                  <div style={{ marginBottom: '10px', color: theme.text }}>
-                    <strong style={{ color: theme.textSecondary }}>Created:</strong> {data.profile.createdAt}
+
+                {/* Reputation */}
+                {(data.profile.sessionsCompleted || data.profile.avgRating || data.profile.reputationScore) && (
+                  <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                    <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Reputation</h3>
+                    {data.profile.sessionsCompleted !== undefined && (
+                      <div style={{ marginBottom: '8px', color: theme.text }}>
+                        <strong style={{ color: theme.textSecondary }}>Sessions Completed:</strong> {data.profile.sessionsCompleted}
+                      </div>
+                    )}
+                    {data.profile.sessionsGiven !== undefined && (
+                      <div style={{ marginBottom: '8px', color: theme.text }}>
+                        <strong style={{ color: theme.textSecondary }}>Sessions Given:</strong> {data.profile.sessionsGiven}
+                      </div>
+                    )}
+                    {data.profile.avgRating !== undefined && data.profile.avgRating > 0 && (
+                      <div style={{ marginBottom: '8px', color: theme.text }}>
+                        <strong style={{ color: theme.textSecondary }}>Average Rating:</strong> {data.profile.avgRating.toFixed(1)}/5
+                      </div>
+                    )}
+                    {data.profile.reputationScore !== undefined && (
+                      <div style={{ marginBottom: '8px', color: theme.text }}>
+                        <strong style={{ color: theme.textSecondary }}>Reputation Score:</strong> {data.profile.reputationScore}
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* System Info */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ marginBottom: '8px', color: theme.text }}>
+                    <strong style={{ color: theme.textSecondary }}>Space ID:</strong> {data.profile.spaceId}
+                  </div>
+                  {data.profile.createdAt && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Created:</strong> {new Date(data.profile.createdAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={() => setEditingProfile(true)}
                   style={{
@@ -535,75 +737,328 @@ export default function Me() {
                 </button>
               </>
             ) : (
-              <form onSubmit={handleUpdateProfile}>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ color: theme.text }}>
-                    Display Name:
+              <form onSubmit={handleUpdateProfile} style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: '10px' }}>
+                {/* Core Identity Section */}
+                <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Core Identity</h3>
+                  
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>
+                      Display Name <span style={{ color: theme.errorText }}>*</span>
+                    </label>
                     <input
                       type="text"
                       name="displayName"
                       defaultValue={data.profile.displayName}
                       required
                       style={{ 
-                        marginLeft: '10px',
-                        padding: '6px 10px',
-                        borderRadius: '4px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
+                        fontSize: '14px',
                       }}
                     />
-                  </label>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ color: theme.text }}>
-                    Skills:
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Username</label>
                     <input
                       type="text"
-                      name="skills"
-                      defaultValue={data.profile.skills}
+                      name="username"
+                      defaultValue={data.profile.username || ''}
+                      placeholder="e.g. @alice"
                       style={{ 
-                        marginLeft: '10px',
-                        padding: '6px 10px',
-                        borderRadius: '4px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
+                        fontSize: '14px',
                       }}
                     />
-                  </label>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ color: theme.text }}>
-                    Timezone:
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Profile Image URL</label>
+                    <input
+                      type="url"
+                      name="profileImage"
+                      defaultValue={data.profile.profileImage || ''}
+                      placeholder="https://..."
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Short Bio</label>
+                    <input
+                      type="text"
+                      name="bio"
+                      defaultValue={data.profile.bio || ''}
+                      placeholder="Brief description"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Long Bio</label>
+                    <textarea
+                      name="bioLong"
+                      defaultValue={data.profile.bioLong || ''}
+                      placeholder="Detailed description"
+                      rows={4}
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                        fontFamily: 'inherit',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Timezone</label>
                     <input
                       type="text"
                       name="timezone"
                       defaultValue={data.profile.timezone}
+                      placeholder="e.g. UTC-5, America/New_York"
                       style={{ 
-                        marginLeft: '10px',
-                        padding: '6px 10px',
-                        borderRadius: '4px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
+                        fontSize: '14px',
                       }}
                     />
-                  </label>
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Languages (comma-separated)</label>
+                    <input
+                      type="text"
+                      name="languages"
+                      defaultValue={data.profile.languages ? data.profile.languages.join(', ') : ''}
+                      placeholder="e.g. English, Spanish, French"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '8px' }}>Contact Links</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <input
+                        type="text"
+                        name="contactTwitter"
+                        defaultValue={data.profile.contactLinks?.twitter || ''}
+                        placeholder="Twitter/X handle"
+                        style={{ 
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.inputBorder}`,
+                          backgroundColor: theme.inputBg,
+                          color: theme.text,
+                          fontSize: '14px',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        name="contactGithub"
+                        defaultValue={data.profile.contactLinks?.github || ''}
+                        placeholder="GitHub username"
+                        style={{ 
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.inputBorder}`,
+                          backgroundColor: theme.inputBg,
+                          color: theme.text,
+                          fontSize: '14px',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        name="contactTelegram"
+                        defaultValue={data.profile.contactLinks?.telegram || ''}
+                        placeholder="Telegram handle"
+                        style={{ 
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.inputBorder}`,
+                          backgroundColor: theme.inputBg,
+                          color: theme.text,
+                          fontSize: '14px',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        name="contactDiscord"
+                        defaultValue={data.profile.contactLinks?.discord || ''}
+                        placeholder="Discord username"
+                        style={{ 
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.inputBorder}`,
+                          backgroundColor: theme.inputBg,
+                          color: theme.text,
+                          fontSize: '14px',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div style={{ marginTop: '10px' }}>
+
+                {/* Skills / Roles Section */}
+                <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Skills & Roles</h3>
+                  
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Skills (comma-separated)</label>
+                    <input
+                      type="text"
+                      name="skills"
+                      defaultValue={data.profile.skills || (data.profile.skillsArray ? data.profile.skillsArray.join(', ') : '')}
+                      placeholder="e.g. solidity, react, design"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Seniority Level</label>
+                    <select
+                      name="seniority"
+                      defaultValue={data.profile.seniority || ''}
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    >
+                      <option value="">Select...</option>
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                      <option value="expert">Expert</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Domains of Interest (comma-separated)</label>
+                    <input
+                      type="text"
+                      name="domainsOfInterest"
+                      defaultValue={data.profile.domainsOfInterest ? data.profile.domainsOfInterest.join(', ') : ''}
+                      placeholder="e.g. AI agents, infra, cryptography, zk, design"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Mentor Roles (comma-separated)</label>
+                    <input
+                      type="text"
+                      name="mentorRoles"
+                      defaultValue={data.profile.mentorRoles ? data.profile.mentorRoles.join(', ') : ''}
+                      placeholder="e.g. technical mentor, product mentor, founder coach"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Learner Roles (comma-separated)</label>
+                    <input
+                      type="text"
+                      name="learnerRoles"
+                      defaultValue={data.profile.learnerRoles ? data.profile.learnerRoles.join(', ') : ''}
+                      placeholder="What you want to learn"
+                      style={{ 
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '20px', display: 'flex', gap: '12px' }}>
                   <button
                     type="submit"
                     disabled={submitting === 'profile'}
                     style={{
-                      padding: '8px 16px',
+                      padding: '10px 20px',
                       fontSize: '14px',
+                      fontWeight: '500',
                       backgroundColor: submitting === 'profile' ? '#ccc' : '#0066cc',
                       color: 'white',
                       border: 'none',
                       borderRadius: '6px',
                       cursor: submitting === 'profile' ? 'not-allowed' : 'pointer',
-                      marginRight: '10px',
                       transition: 'all 0.2s ease',
                     }}
                   >
@@ -614,8 +1069,9 @@ export default function Me() {
                     onClick={() => setEditingProfile(false)}
                     disabled={submitting === 'profile'}
                     style={{
-                      padding: '8px 16px',
+                      padding: '10px 20px',
                       fontSize: '14px',
+                      fontWeight: '500',
                       backgroundColor: '#6c757d',
                       color: 'white',
                       border: 'none',
@@ -631,65 +1087,290 @@ export default function Me() {
             )}
           </div>
         ) : (
-          <form onSubmit={handleCreateProfile}>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ color: theme.text }}>
-                Display Name:
-                <input 
-                  type="text" 
-                  name="displayName" 
-                  required 
+          <form onSubmit={handleCreateProfile} style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: '10px' }}>
+            <p style={{ color: theme.textSecondary, marginBottom: '20px', fontSize: '14px' }}>
+              Create your profile to start participating in the mentorship network. All fields except Display Name are optional.
+            </p>
+
+            {/* Core Identity Section */}
+            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+              <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Core Identity</h3>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>
+                  Display Name <span style={{ color: theme.errorText }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  name="displayName"
+                  required
                   style={{ 
-                    marginLeft: '10px',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
                     border: `1px solid ${theme.inputBorder}`,
                     backgroundColor: theme.inputBg,
                     color: theme.text,
-                  }} 
+                    fontSize: '14px',
+                  }}
                 />
-              </label>
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ color: theme.text }}>
-                Skills:
-                <input 
-                  type="text" 
-                  name="skills" 
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Username</label>
+                <input
+                  type="text"
+                  name="username"
+                  placeholder="e.g. @alice"
                   style={{ 
-                    marginLeft: '10px',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
                     border: `1px solid ${theme.inputBorder}`,
                     backgroundColor: theme.inputBg,
                     color: theme.text,
-                  }} 
+                    fontSize: '14px',
+                  }}
                 />
-              </label>
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ color: theme.text }}>
-                Timezone:
-                <input 
-                  type="text" 
-                  name="timezone" 
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Profile Image URL</label>
+                <input
+                  type="url"
+                  name="profileImage"
+                  placeholder="https://..."
                   style={{ 
-                    marginLeft: '10px',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
                     border: `1px solid ${theme.inputBorder}`,
                     backgroundColor: theme.inputBg,
                     color: theme.text,
-                  }} 
+                    fontSize: '14px',
+                  }}
                 />
-              </label>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Short Bio</label>
+                <input
+                  type="text"
+                  name="bio"
+                  placeholder="Brief description"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Timezone</label>
+                <input
+                  type="text"
+                  name="timezone"
+                  placeholder="e.g. UTC-5, America/New_York"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Languages (comma-separated)</label>
+                <input
+                  type="text"
+                  name="languages"
+                  placeholder="e.g. English, Spanish, French"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '8px' }}>Contact Links</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <input
+                    type="text"
+                    name="contactTwitter"
+                    placeholder="Twitter/X handle"
+                    style={{ 
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                    }}
+                  />
+                  <input
+                    type="text"
+                    name="contactGithub"
+                    placeholder="GitHub username"
+                    style={{ 
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                    }}
+                  />
+                  <input
+                    type="text"
+                    name="contactTelegram"
+                    placeholder="Telegram handle"
+                    style={{ 
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                    }}
+                  />
+                  <input
+                    type="text"
+                    name="contactDiscord"
+                    placeholder="Discord username"
+                    style={{ 
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
+              </div>
             </div>
+
+            {/* Skills / Roles Section */}
+            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+              <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Skills & Roles</h3>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  name="skills"
+                  placeholder="e.g. solidity, react, design"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Seniority Level</label>
+                <select
+                  name="seniority"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                >
+                  <option value="">Select...</option>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                  <option value="expert">Expert</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Domains of Interest (comma-separated)</label>
+                <input
+                  type="text"
+                  name="domainsOfInterest"
+                  placeholder="e.g. AI agents, infra, cryptography, zk, design"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Mentor Roles (comma-separated)</label>
+                <input
+                  type="text"
+                  name="mentorRoles"
+                  placeholder="e.g. technical mentor, product mentor, founder coach"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Learner Roles (comma-separated)</label>
+                <input
+                  type="text"
+                  name="learnerRoles"
+                  placeholder="What you want to learn"
+                  style={{ 
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.inputBorder}`,
+                    backgroundColor: theme.inputBg,
+                    color: theme.text,
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+            </div>
+
             <button 
               type="submit" 
               disabled={submitting === 'profile'}
               style={{
-                padding: '8px 16px',
+                padding: '10px 20px',
                 fontSize: '14px',
+                fontWeight: '500',
                 backgroundColor: submitting === 'profile' ? '#ccc' : '#0066cc',
                 color: 'white',
                 border: 'none',

@@ -22,28 +22,80 @@ export default async function handler(req: any, res: any) {
       const { action } = req.body;
 
       if (action === 'createProfile') {
-        const { displayName, skills, timezone } = req.body;
+        const { 
+          displayName, 
+          username,
+          profileImage,
+          bio,
+          bioLong,
+          skills, 
+          skillsArray,
+          timezone,
+          languages,
+          contactLinks,
+          seniority,
+          domainsOfInterest,
+          mentorRoles,
+          learnerRoles,
+        } = req.body;
         if (!displayName) {
           return res.status(400).json({ ok: false, error: 'displayName is required' });
         }
         await createUserProfile({
           wallet: CURRENT_WALLET,
           displayName,
+          username,
+          profileImage,
+          bio,
+          bioLong,
           skills: skills || '',
+          skillsArray: skillsArray || (skills ? skills.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined),
           timezone: timezone || '',
+          languages: languages || undefined,
+          contactLinks: contactLinks || undefined,
+          seniority: seniority || undefined,
+          domainsOfInterest: domainsOfInterest || undefined,
+          mentorRoles: mentorRoles || undefined,
+          learnerRoles: learnerRoles || undefined,
           privateKey: ARKIV_PRIVATE_KEY,
         });
         res.json({ ok: true });
       } else if (action === 'updateProfile') {
-        const { displayName, skills, timezone } = req.body;
+        const { 
+          displayName,
+          username,
+          profileImage,
+          bio,
+          bioLong,
+          skills, 
+          skillsArray,
+          timezone,
+          languages,
+          contactLinks,
+          seniority,
+          domainsOfInterest,
+          mentorRoles,
+          learnerRoles,
+        } = req.body;
         if (!displayName) {
           return res.status(400).json({ ok: false, error: 'displayName is required' });
         }
         await updateUserProfile({
           wallet: CURRENT_WALLET,
           displayName,
+          username,
+          profileImage,
+          bio,
+          bioLong,
           skills: skills || '',
+          skillsArray: skillsArray || (skills ? skills.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined),
           timezone: timezone || '',
+          languages: languages || undefined,
+          contactLinks: contactLinks || undefined,
+          seniority: seniority || undefined,
+          domainsOfInterest: domainsOfInterest || undefined,
+          mentorRoles: mentorRoles || undefined,
+          learnerRoles: learnerRoles || undefined,
           privateKey: ARKIV_PRIVATE_KEY,
         });
         res.json({ ok: true });
