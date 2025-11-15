@@ -87,6 +87,7 @@ export default function Network() {
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [userWallet, setUserWallet] = useState<string>('');
   const [showAnalytics, setShowAnalytics] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [, setNow] = useState(Date.now());
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
@@ -481,14 +482,31 @@ export default function Network() {
   const displayedAsks = typeFilter === 'all' || typeFilter === 'asks' ? asks : [];
   const displayedOffers = typeFilter === 'all' || typeFilter === 'offers' ? offers : [];
 
+  // Theme colors based on dark mode (needed for loading state)
+  const theme = {
+    bg: darkMode ? '#1a1a1a' : '#f8f9fa',
+    cardBg: darkMode ? '#2d2d2d' : '#ffffff',
+    text: darkMode ? '#e0e0e0' : '#212529',
+    textSecondary: darkMode ? '#b0b0b0' : '#6c757d',
+    textTertiary: darkMode ? '#888888' : '#868e96',
+    border: darkMode ? '#404040' : '#dee2e6',
+    borderLight: darkMode ? '#353535' : '#e9ecef',
+    inputBg: darkMode ? '#353535' : '#ffffff',
+    inputBorder: darkMode ? '#505050' : '#ced4da',
+    hoverBg: darkMode ? '#3a3a3a' : '#f1f3f5',
+    shadow: darkMode ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
+    shadowHover: darkMode ? '0 4px 12px rgba(0, 0, 0, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.1)',
+  };
+
   if (loading) {
     return (
       <main style={{ 
         padding: '40px 20px', 
         minHeight: '100vh',
-        backgroundColor: '#f8f9fa'
+        backgroundColor: theme.bg,
+        transition: 'background-color 0.3s ease'
       }}>
-        <div style={{ textAlign: 'center', color: '#6c757d', fontSize: '16px' }}>Loading network data...</div>
+        <div style={{ textAlign: 'center', color: theme.textSecondary, fontSize: '16px' }}>Loading network data...</div>
       </main>
     );
   }
@@ -497,9 +515,10 @@ export default function Network() {
     <main style={{ 
       padding: '32px 24px', 
       minHeight: '100vh',
-      backgroundColor: '#f8f9fa',
+      backgroundColor: theme.bg,
       maxWidth: '1600px',
-      margin: '0 auto'
+      margin: '0 auto',
+      transition: 'background-color 0.3s ease'
     }}>
       {/* Header */}
       <div style={{ 
@@ -508,51 +527,77 @@ export default function Network() {
         alignItems: 'center', 
         marginBottom: '32px',
         paddingBottom: '24px',
-        borderBottom: '2px solid #e9ecef'
+        borderBottom: `2px solid ${theme.borderLight}`
       }}>
         <div>
           <h1 style={{ 
             margin: 0, 
             fontSize: '32px',
             fontWeight: '700',
-            color: '#212529',
-            letterSpacing: '-0.5px'
+            color: theme.text,
+            letterSpacing: '-0.5px',
+            transition: 'color 0.3s ease'
           }}>
             Network Analytics
           </h1>
           <p style={{ 
             margin: '8px 0 0 0',
             fontSize: '14px',
-            color: '#6c757d'
+            color: theme.textSecondary,
+            transition: 'color 0.3s ease'
           }}>
             Arkiv-powered mentorship network visualization
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
-            onClick={() => setShowAnalytics(!showAnalytics)}
+            onClick={() => setDarkMode(!darkMode)}
             style={{
-              padding: '10px 20px',
+              padding: '8px 16px',
               fontSize: '14px',
               fontWeight: '500',
-              backgroundColor: showAnalytics ? '#0066cc' : '#ffffff',
-              color: showAnalytics ? '#ffffff' : '#495057',
-              border: '1px solid #dee2e6',
+              backgroundColor: darkMode ? '#4a4a4a' : '#f0f0f0',
+              color: darkMode ? '#ffffff' : '#495057',
+              border: '1px solid ' + theme.border,
               borderRadius: '6px',
               cursor: 'pointer',
               boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
               transition: 'all 0.2s ease',
             }}
             onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = darkMode ? '#5a5a5a' : '#e0e0e0';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = darkMode ? '#4a4a4a' : '#f0f0f0';
+            }}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+          <button
+            onClick={() => setShowAnalytics(!showAnalytics)}
+            style={{
+              padding: '10px 20px',
+              fontSize: '14px',
+              fontWeight: '500',
+              backgroundColor: showAnalytics ? '#0066cc' : theme.cardBg,
+              color: showAnalytics ? '#ffffff' : theme.text,
+              border: `1px solid ${theme.border}`,
+              borderRadius: '6px',
+              cursor: 'pointer',
+              boxShadow: theme.shadow,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
               if (!showAnalytics) {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#adb5bd';
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+                e.currentTarget.style.borderColor = darkMode ? '#505050' : '#adb5bd';
               }
             }}
             onMouseLeave={(e) => {
               if (!showAnalytics) {
-                e.currentTarget.style.backgroundColor = '#ffffff';
-                e.currentTarget.style.borderColor = '#dee2e6';
+                e.currentTarget.style.backgroundColor = theme.cardBg;
+                e.currentTarget.style.borderColor = theme.border;
               }
             }}
           >
@@ -592,14 +637,15 @@ export default function Network() {
       <section style={{ 
         marginBottom: '24px', 
         padding: '20px', 
-        border: '1px solid #dee2e6', 
+        border: `1px solid ${theme.border}`, 
         borderRadius: '8px', 
-        backgroundColor: '#ffffff',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)'
+        backgroundColor: theme.cardBg,
+        boxShadow: theme.shadow,
+        transition: 'all 0.3s ease'
       }}>
         <form onSubmit={handleApplyFilter} style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>Skill:</span>
+            <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>Skill:</span>
             <input
               type="text"
               value={skillFilter}
@@ -608,13 +654,15 @@ export default function Network() {
               style={{ 
                 padding: '8px 12px', 
                 borderRadius: '6px', 
-                border: '1px solid #ced4da',
+                border: `1px solid ${theme.inputBorder}`,
+                backgroundColor: theme.inputBg,
+                color: theme.text,
                 fontSize: '14px',
                 width: '180px',
-                transition: 'border-color 0.2s',
+                transition: 'all 0.2s',
               }}
               onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ced4da'}
+              onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
             />
           </label>
           <button 
@@ -645,21 +693,22 @@ export default function Network() {
             Apply
           </button>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: '#495057' }}>Type:</span>
+            <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>Type:</span>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as 'all' | 'asks' | 'offers')}
               style={{ 
                 padding: '8px 12px', 
                 borderRadius: '6px', 
-                border: '1px solid #ced4da',
+                border: `1px solid ${theme.inputBorder}`,
                 fontSize: '14px',
-                backgroundColor: '#ffffff',
+                backgroundColor: theme.inputBg,
+                color: theme.text,
                 cursor: 'pointer',
                 transition: 'border-color 0.2s',
               }}
               onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ced4da'}
+              onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
             >
               <option value="all">All</option>
               <option value="asks">Asks</option>
@@ -674,32 +723,35 @@ export default function Network() {
         {/* Web Visualization */}
         <div style={{ flex: 1, position: 'relative' }}>
           <div style={{ 
-            border: '1px solid #dee2e6', 
+            border: `1px solid ${theme.border}`, 
             borderRadius: '12px', 
-            backgroundColor: '#ffffff',
+            backgroundColor: theme.cardBg,
             padding: '24px',
             minHeight: '640px',
             position: 'relative',
             overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+            boxShadow: theme.shadow,
+            transition: 'all 0.3s ease'
           }}>
             <div style={{ 
               marginBottom: '16px',
               paddingBottom: '16px',
-              borderBottom: '1px solid #e9ecef'
+              borderBottom: `1px solid ${theme.borderLight}`
             }}>
               <h2 style={{ 
                 margin: 0,
                 fontSize: '20px',
                 fontWeight: '600',
-                color: '#212529'
+                color: theme.text,
+                transition: 'color 0.3s ease'
               }}>
                 Network Web
               </h2>
               <p style={{ 
                 margin: '4px 0 0 0',
                 fontSize: '13px',
-                color: '#6c757d'
+                color: theme.textSecondary,
+                transition: 'color 0.3s ease'
               }}>
                 Drag nodes to explore • Blue: same skill • Purple: same wallet • Green dashed: potential matches
               </p>
@@ -778,13 +830,15 @@ export default function Network() {
                       transform: 'translate(-50%, -50%)',
                       width: '160px',
                       padding: '12px',
-                      backgroundColor: node.type === 'ask' ? '#fff5f5' : '#f0f9f4',
-                      border: `2px solid ${node.type === 'ask' ? '#ef5350' : '#4caf50'}`,
-                      borderRadius: '10px',
-                      cursor: isDragging ? 'grabbing' : 'grab',
-                      boxShadow: isDragging 
-                        ? '0 8px 24px rgba(0,0,0,0.25)' 
-                        : '0 2px 8px rgba(0,0,0,0.12)',
+                    backgroundColor: darkMode 
+                      ? (node.type === 'ask' ? '#3a2525' : '#253a25')
+                      : (node.type === 'ask' ? '#fff5f5' : '#f0f9f4'),
+                    border: `2px solid ${node.type === 'ask' ? '#ef5350' : '#4caf50'}`,
+                    borderRadius: '10px',
+                    cursor: isDragging ? 'grabbing' : 'grab',
+                    boxShadow: isDragging 
+                        ? (darkMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.25)')
+                        : (darkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.12)'),
                       fontSize: '12px',
                       transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
                       zIndex: isDragging ? 100 : 1,
@@ -796,14 +850,18 @@ export default function Network() {
                     onMouseEnter={(e) => {
                       if (!isDragging) {
                         e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)';
-                        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+                        e.currentTarget.style.boxShadow = darkMode 
+                          ? '0 4px 16px rgba(0,0,0,0.5)' 
+                          : '0 4px 16px rgba(0,0,0,0.2)';
                         e.currentTarget.style.zIndex = '10';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isDragging) {
                         e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
-                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)';
+                        e.currentTarget.style.boxShadow = darkMode 
+                          ? '0 2px 8px rgba(0,0,0,0.4)' 
+                          : '0 2px 8px rgba(0,0,0,0.12)';
                         e.currentTarget.style.zIndex = '1';
                       }
                     }}
@@ -819,24 +877,24 @@ export default function Network() {
                   <div style={{ 
                     marginBottom: '4px', 
                     fontWeight: '500',
-                    color: '#212529',
+                    color: theme.text,
                     fontSize: '13px'
                   }}>
                     {node.skill || 'Unknown'}
                   </div>
                   <div style={{ 
                     fontSize: '11px', 
-                    color: '#6c757d', 
+                    color: theme.textSecondary, 
                     marginBottom: '4px'
                   }}>
                     {shortenWallet(node.wallet)}
                   </div>
                   <div style={{ 
                     fontSize: '11px', 
-                    color: '#868e96', 
+                    color: theme.textTertiary, 
                     marginTop: '6px',
                     paddingTop: '6px',
-                    borderTop: '1px solid #e9ecef'
+                    borderTop: `1px solid ${theme.borderLight}`
                   }}>
                     {formatTimeRemaining(node.createdAt, node.ttlSeconds)}
                   </div>
@@ -852,19 +910,21 @@ export default function Network() {
           <div style={{ 
             width: '320px', 
             padding: '24px', 
-            border: '1px solid #dee2e6', 
+            border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
-            backgroundColor: '#ffffff',
+            backgroundColor: theme.cardBg,
             maxHeight: '640px',
             overflowY: 'auto',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+            boxShadow: theme.shadow,
+            transition: 'all 0.3s ease'
           }}>
             <h2 style={{ 
               marginTop: 0, 
               marginBottom: '24px',
               fontSize: '20px',
               fontWeight: '600',
-              color: '#212529'
+              color: theme.text,
+              transition: 'color 0.3s ease'
             }}>
               Analytics
             </h2>
@@ -873,77 +933,77 @@ export default function Network() {
             <div style={{ marginBottom: '28px' }}>
               <div style={{ 
                 padding: '20px', 
-                border: '1px solid #e9ecef', 
+                border: `1px solid ${theme.borderLight}`, 
                 borderRadius: '8px', 
                 marginBottom: '12px',
-                backgroundColor: '#f8f9fa',
+                backgroundColor: theme.hoverBg,
                 transition: 'all 0.2s ease',
                 cursor: 'default'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f3f5';
-                e.currentTarget.style.borderColor = '#dee2e6';
-                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                e.currentTarget.style.borderColor = theme.border;
+                e.currentTarget.style.boxShadow = theme.shadow;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#e9ecef';
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+                e.currentTarget.style.borderColor = theme.borderLight;
                 e.currentTarget.style.boxShadow = 'none';
               }}
               >
                 <div style={{ fontSize: '28px', fontWeight: '700', color: '#0066cc', marginBottom: '6px' }}>
                   {totalAsks}
                 </div>
-                <div style={{ color: '#6c757d', fontSize: '13px', fontWeight: '500' }}>Open Asks</div>
+                <div style={{ color: theme.textSecondary, fontSize: '13px', fontWeight: '500' }}>Open Asks</div>
               </div>
               <div style={{ 
                 padding: '20px', 
-                border: '1px solid #e9ecef', 
+                border: `1px solid ${theme.borderLight}`, 
                 borderRadius: '8px', 
                 marginBottom: '12px',
-                backgroundColor: '#f8f9fa',
+                backgroundColor: theme.hoverBg,
                 transition: 'all 0.2s ease',
                 cursor: 'default'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f3f5';
-                e.currentTarget.style.borderColor = '#dee2e6';
-                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                e.currentTarget.style.borderColor = theme.border;
+                e.currentTarget.style.boxShadow = theme.shadow;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#e9ecef';
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+                e.currentTarget.style.borderColor = theme.borderLight;
                 e.currentTarget.style.boxShadow = 'none';
               }}
               >
                 <div style={{ fontSize: '28px', fontWeight: '700', color: '#0066cc', marginBottom: '6px' }}>
                   {totalOffers}
                 </div>
-                <div style={{ color: '#6c757d', fontSize: '13px', fontWeight: '500' }}>Active Offers</div>
+                <div style={{ color: theme.textSecondary, fontSize: '13px', fontWeight: '500' }}>Active Offers</div>
               </div>
               <div style={{ 
                 padding: '20px', 
-                border: '1px solid #e9ecef', 
+                border: `1px solid ${theme.borderLight}`, 
                 borderRadius: '8px',
-                backgroundColor: '#f8f9fa',
+                backgroundColor: theme.hoverBg,
                 transition: 'all 0.2s ease',
                 cursor: 'default'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f3f5';
-                e.currentTarget.style.borderColor = '#dee2e6';
-                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                e.currentTarget.style.borderColor = theme.border;
+                e.currentTarget.style.boxShadow = theme.shadow;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8f9fa';
-                e.currentTarget.style.borderColor = '#e9ecef';
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+                e.currentTarget.style.borderColor = theme.borderLight;
                 e.currentTarget.style.boxShadow = 'none';
               }}
               >
                 <div style={{ fontSize: '28px', fontWeight: '700', color: '#0066cc', marginBottom: '6px' }}>
                   {uniqueWallets}
                 </div>
-                <div style={{ color: '#6c757d', fontSize: '13px', fontWeight: '500' }}>Contributors</div>
+                <div style={{ color: theme.textSecondary, fontSize: '13px', fontWeight: '500' }}>Contributors</div>
               </div>
             </div>
 
@@ -953,7 +1013,8 @@ export default function Network() {
                 fontSize: '16px', 
                 marginBottom: '16px',
                 fontWeight: '600',
-                color: '#212529'
+                color: theme.text,
+                transition: 'color 0.3s ease'
               }}>
                 Top Skills
               </h3>
@@ -967,22 +1028,22 @@ export default function Network() {
                       style={{ 
                         marginBottom: '10px', 
                         padding: '12px', 
-                        backgroundColor: '#f8f9fa', 
+                        backgroundColor: theme.hoverBg, 
                         borderRadius: '6px',
-                        border: '1px solid #e9ecef',
+                        border: `1px solid ${theme.borderLight}`,
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f1f3f5';
-                        e.currentTarget.style.borderColor = '#dee2e6';
+                        e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                        e.currentTarget.style.borderColor = theme.border;
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f8f9fa';
-                        e.currentTarget.style.borderColor = '#e9ecef';
+                        e.currentTarget.style.backgroundColor = theme.hoverBg;
+                        e.currentTarget.style.borderColor = theme.borderLight;
                       }}
                     >
-                      <div style={{ fontWeight: '500', marginBottom: '4px', color: '#212529' }}>{skill}</div>
-                      <div style={{ color: '#6c757d', fontSize: '12px' }}>
+                      <div style={{ fontWeight: '500', marginBottom: '4px', color: theme.text }}>{skill}</div>
+                      <div style={{ color: theme.textSecondary, fontSize: '12px' }}>
                         {counts.asks} asks, {counts.offers} offers
                       </div>
                     </div>
@@ -999,21 +1060,23 @@ export default function Network() {
           <section style={{ 
             marginBottom: '32px', 
             padding: '28px', 
-            border: '1px solid #dee2e6', 
+            border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+            backgroundColor: theme.cardBg,
+            boxShadow: theme.shadow,
+            transition: 'all 0.3s ease'
           }}>
             <div style={{ 
               marginBottom: '24px',
               paddingBottom: '16px',
-              borderBottom: '2px solid #e9ecef'
+              borderBottom: `2px solid ${theme.borderLight}`
             }}>
               <h2 style={{ 
                 margin: 0,
                 fontSize: '22px',
                 fontWeight: '600',
-                color: '#212529'
+                color: theme.text,
+                transition: 'color 0.3s ease'
               }}>
                 Open Asks ({displayedAsks.length})
               </h2>
@@ -1024,27 +1087,27 @@ export default function Network() {
                   key={ask.key} 
                   style={{ 
                     padding: '20px', 
-                    border: '1px solid #e9ecef', 
+                    border: `1px solid ${theme.borderLight}`, 
                     borderRadius: '8px', 
-                    backgroundColor: '#fff5f5',
+                    backgroundColor: darkMode ? '#3a2525' : '#fff5f5',
                     transition: 'all 0.2s ease',
                     borderLeft: '4px solid #ef5350'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.boxShadow = theme.shadowHover;
                     e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.borderColor = '#dee2e6';
+                    e.currentTarget.style.borderColor = theme.border;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = '#e9ecef';
+                    e.currentTarget.style.borderColor = theme.borderLight;
                   }}
                 >
                   <div style={{ 
                     marginBottom: '12px', 
                     paddingBottom: '12px', 
-                    borderBottom: '1px solid #ffe0e0'
+                    borderBottom: darkMode ? '1px solid #4a2a2a' : '1px solid #ffe0e0'
                   }}>
                     <strong style={{ 
                       color: '#d32f2f',
@@ -1056,31 +1119,31 @@ export default function Network() {
                   </div>
                   <div style={{ 
                     marginBottom: '8px', 
-                    color: '#495057',
+                    color: theme.text,
                     fontSize: '14px'
                   }}>
-                    <strong style={{ color: '#6c757d' }}>Wallet:</strong> {shortenWallet(ask.wallet)}
+                    <strong style={{ color: theme.textSecondary }}>Wallet:</strong> {shortenWallet(ask.wallet)}
                   </div>
                   <div style={{ 
                     marginBottom: '8px', 
-                    color: '#495057',
+                    color: theme.text,
                     fontSize: '14px'
                   }}>
-                    <strong style={{ color: '#6c757d' }}>Message:</strong> {ask.message || 'N/A'}
+                    <strong style={{ color: theme.textSecondary }}>Message:</strong> {ask.message || 'N/A'}
                   </div>
                   <div style={{ 
                     marginBottom: '12px', 
                     fontSize: '13px', 
-                    color: '#868e96',
+                    color: theme.textTertiary,
                     padding: '6px 10px',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: theme.cardBg,
                     borderRadius: '4px',
                     display: 'inline-block'
                   }}>
                     {formatTimeRemaining(ask.createdAt, ask.ttlSeconds)}
                   </div>
                   {ask.txHash && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ffe0e0' }}>
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: darkMode ? '1px solid #4a2a2a' : '1px solid #ffe0e0' }}>
                       <a
                         href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${ask.txHash}`}
                         target="_blank"
@@ -1094,9 +1157,9 @@ export default function Network() {
                           textDecoration: 'none',
                           fontWeight: '500',
                           padding: '6px 12px',
-                          backgroundColor: '#e7f3ff',
+                          backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
                           borderRadius: '6px',
-                          border: '1px solid #b3d9ff',
+                          border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
                           transition: 'all 0.2s ease'
                         }}
                         onClick={(e) => {
@@ -1104,12 +1167,12 @@ export default function Network() {
                           copyToClipboard(ask.txHash!);
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#d0e7ff';
-                          e.currentTarget.style.borderColor = '#80c7ff';
+                          e.currentTarget.style.backgroundColor = darkMode ? '#2a5a7a' : '#d0e7ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#3a7a9a' : '#80c7ff';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#e7f3ff';
-                          e.currentTarget.style.borderColor = '#b3d9ff';
+                          e.currentTarget.style.backgroundColor = darkMode ? '#1a3a5a' : '#e7f3ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#2a5a7a' : '#b3d9ff';
                         }}
                         title="Click to open in explorer (copies hash to clipboard)">
                         View on Arkiv Explorer ↗
@@ -1126,21 +1189,23 @@ export default function Network() {
           <section style={{ 
             marginBottom: '32px', 
             padding: '28px', 
-            border: '1px solid #dee2e6', 
+            border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+            backgroundColor: theme.cardBg,
+            boxShadow: theme.shadow,
+            transition: 'all 0.3s ease'
           }}>
             <div style={{ 
               marginBottom: '24px',
               paddingBottom: '16px',
-              borderBottom: '2px solid #e9ecef'
+              borderBottom: `2px solid ${theme.borderLight}`
             }}>
               <h2 style={{ 
                 margin: 0,
                 fontSize: '22px',
                 fontWeight: '600',
-                color: '#212529'
+                color: theme.text,
+                transition: 'color 0.3s ease'
               }}>
                 Active Offers ({displayedOffers.length})
               </h2>
@@ -1151,27 +1216,27 @@ export default function Network() {
                   key={offer.key} 
                   style={{ 
                     padding: '20px', 
-                    border: '1px solid #e9ecef', 
+                    border: `1px solid ${theme.borderLight}`, 
                     borderRadius: '8px', 
-                    backgroundColor: '#f0f9f4',
+                    backgroundColor: darkMode ? '#253a25' : '#f0f9f4',
                     transition: 'all 0.2s ease',
                     borderLeft: '4px solid #4caf50'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                    e.currentTarget.style.boxShadow = theme.shadowHover;
                     e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.borderColor = '#dee2e6';
+                    e.currentTarget.style.borderColor = theme.border;
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = '#e9ecef';
+                    e.currentTarget.style.borderColor = theme.borderLight;
                   }}
                 >
                   <div style={{ 
                     marginBottom: '12px', 
                     paddingBottom: '12px', 
-                    borderBottom: '1px solid #d4edda'
+                    borderBottom: darkMode ? '1px solid #2a4a2a' : '1px solid #d4edda'
                   }}>
                     <strong style={{ 
                       color: '#2e7d32',
@@ -1183,38 +1248,38 @@ export default function Network() {
                   </div>
                   <div style={{ 
                     marginBottom: '8px', 
-                    color: '#495057',
+                    color: theme.text,
                     fontSize: '14px'
                   }}>
-                    <strong style={{ color: '#6c757d' }}>Wallet:</strong> {shortenWallet(offer.wallet)}
+                    <strong style={{ color: theme.textSecondary }}>Wallet:</strong> {shortenWallet(offer.wallet)}
                   </div>
                   <div style={{ 
                     marginBottom: '8px', 
-                    color: '#495057',
+                    color: theme.text,
                     fontSize: '14px'
                   }}>
-                    <strong style={{ color: '#6c757d' }}>Message:</strong> {offer.message || 'N/A'}
+                    <strong style={{ color: theme.textSecondary }}>Message:</strong> {offer.message || 'N/A'}
                   </div>
                   <div style={{ 
                     marginBottom: '8px', 
-                    color: '#495057',
+                    color: theme.text,
                     fontSize: '14px'
                   }}>
-                    <strong style={{ color: '#6c757d' }}>Availability:</strong> {offer.availabilityWindow || 'N/A'}
+                    <strong style={{ color: theme.textSecondary }}>Availability:</strong> {offer.availabilityWindow || 'N/A'}
                   </div>
                   <div style={{ 
                     marginBottom: '12px', 
                     fontSize: '13px', 
-                    color: '#868e96',
+                    color: theme.textTertiary,
                     padding: '6px 10px',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: theme.cardBg,
                     borderRadius: '4px',
                     display: 'inline-block'
                   }}>
                     {formatTimeRemaining(offer.createdAt, offer.ttlSeconds)}
                   </div>
                   {offer.txHash && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #d4edda' }}>
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: darkMode ? '1px solid #2a4a2a' : '1px solid #d4edda' }}>
                       <a
                         href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${offer.txHash}`}
                         target="_blank"
@@ -1228,9 +1293,9 @@ export default function Network() {
                           textDecoration: 'none',
                           fontWeight: '500',
                           padding: '6px 12px',
-                          backgroundColor: '#e7f3ff',
+                          backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
                           borderRadius: '6px',
-                          border: '1px solid #b3d9ff',
+                          border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
                           transition: 'all 0.2s ease'
                         }}
                         onClick={(e) => {
@@ -1238,12 +1303,12 @@ export default function Network() {
                           copyToClipboard(offer.txHash!);
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#d0e7ff';
-                          e.currentTarget.style.borderColor = '#80c7ff';
+                          e.currentTarget.style.backgroundColor = darkMode ? '#2a5a7a' : '#d0e7ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#3a7a9a' : '#80c7ff';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#e7f3ff';
-                          e.currentTarget.style.borderColor = '#b3d9ff';
+                          e.currentTarget.style.backgroundColor = darkMode ? '#1a3a5a' : '#e7f3ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#2a5a7a' : '#b3d9ff';
                         }}
                         title="Click to open in explorer (copies hash to clipboard)">
                         View on Arkiv Explorer ↗
