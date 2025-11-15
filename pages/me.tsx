@@ -8,7 +8,8 @@ type Profile = {
   displayName: string;
   username?: string;
   profileImage?: string;
-  bio?: string;
+  bio?: string; // Legacy
+  bioShort?: string;
   bioLong?: string;
   timezone: string;
   languages?: string[];
@@ -33,7 +34,7 @@ type Profile = {
   npsScore?: number;
   topSkillsUsage?: Array<{ skill: string; count: number }>;
   peerTestimonials?: Array<{ text: string; timestamp: string; fromWallet: string }>;
-  trustEdges?: string[];
+  trustEdges?: Array<{ toWallet: string; strength: number; createdAt: string }>;
   // System
   lastActiveTimestamp?: string;
   communityAffiliations?: string[];
@@ -67,11 +68,44 @@ type Offer = {
   txHash?: string;
 };
 
+type Session = {
+  key: string;
+  mentorWallet: string;
+  learnerWallet: string;
+  skill: string;
+  spaceId: string;
+  createdAt: string;
+  sessionDate: string;
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  duration?: number;
+  notes?: string;
+  feedbackKey?: string;
+  txHash?: string;
+};
+
+type Feedback = {
+  key: string;
+  sessionKey: string;
+  fromWallet: string;
+  toWallet: string;
+  role: 'mentor' | 'learner';
+  spaceId: string;
+  createdAt: string;
+  rating?: number;
+  npsScore?: number;
+  text?: string;
+  skills?: string[];
+  wouldRecommend?: boolean;
+  txHash?: string;
+};
+
 type MeData = {
   wallet: string;
   profile: Profile | null;
   asks: Ask[];
   offers: Offer[];
+  sessions: Session[];
+  feedback: Feedback[];
 };
 
 function formatTimeRemaining(createdAt: string, ttlSeconds: number): string {
@@ -104,6 +138,11 @@ function shortenHash(hash: string): string {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
+}
+
+function shortenWallet(wallet: string): string {
+  if (!wallet || wallet.length < 10) return wallet;
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
 }
 
 function ArkivHelperText({ darkMode }: { darkMode: boolean }) {
@@ -202,7 +241,8 @@ export default function Me() {
     const displayName = formData.get('displayName') as string;
     const username = formData.get('username') as string;
     const profileImage = formData.get('profileImage') as string;
-    const bio = formData.get('bio') as string;
+    const bio = formData.get('bio') as string; // Legacy
+    const bioShort = formData.get('bioShort') as string;
     const bioLong = formData.get('bioLong') as string;
     const timezone = formData.get('timezone') as string;
     const languagesStr = formData.get('languages') as string;
@@ -238,7 +278,8 @@ export default function Me() {
       displayName,
       username: username || undefined,
       profileImage: profileImage || undefined,
-      bio: bio || undefined,
+      bio: bio || undefined, // Legacy
+      bioShort: bioShort || undefined,
       bioLong: bioLong || undefined,
       skills,
       skillsArray,
@@ -285,7 +326,8 @@ export default function Me() {
     const displayName = formData.get('displayName') as string;
     const username = formData.get('username') as string;
     const profileImage = formData.get('profileImage') as string;
-    const bio = formData.get('bio') as string;
+    const bio = formData.get('bio') as string; // Legacy
+    const bioShort = formData.get('bioShort') as string;
     const bioLong = formData.get('bioLong') as string;
     const timezone = formData.get('timezone') as string;
     const languagesStr = formData.get('languages') as string;
@@ -321,7 +363,8 @@ export default function Me() {
       displayName,
       username: username || undefined,
       profileImage: profileImage || undefined,
-      bio: bio || undefined,
+      bio: bio || undefined, // Legacy
+      bioShort: bioShort || undefined,
       bioLong: bioLong || undefined,
       skills,
       skillsArray,
@@ -824,9 +867,14 @@ export default function Me() {
                       <strong style={{ color: theme.textSecondary }}>Username:</strong> {data.profile.username}
                     </div>
                   )}
-                  {data.profile.bio && (
+                  {(data.profile.bioShort || data.profile.bio) && (
                     <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Bio:</strong> {data.profile.bio}
+                      <strong style={{ color: theme.textSecondary }}>Short Bio:</strong> {data.profile.bioShort || data.profile.bio}
+                    </div>
+                  )}
+                  {data.profile.bioLong && (
+                    <div style={{ marginBottom: '8px', color: theme.text }}>
+                      <strong style={{ color: theme.textSecondary }}>Long Bio:</strong> {data.profile.bioLong}
                     </div>
                   )}
                   <div style={{ marginBottom: '8px', color: theme.text }}>
@@ -876,32 +924,145 @@ export default function Me() {
                   )}
                 </div>
 
-                {/* Reputation */}
-                {(data.profile.sessionsCompleted || data.profile.avgRating || data.profile.reputationScore) && (
-                  <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
-                    <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Reputation</h3>
+                {/* Reputation Panel */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px' }}>Reputation</h3>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                    gap: '16px',
+                    marginBottom: '16px'
+                  }}>
                     {data.profile.sessionsCompleted !== undefined && (
-                      <div style={{ marginBottom: '8px', color: theme.text }}>
-                        <strong style={{ color: theme.textSecondary }}>Sessions Completed:</strong> {data.profile.sessionsCompleted}
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>Sessions Completed</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>{data.profile.sessionsCompleted}</div>
                       </div>
                     )}
                     {data.profile.sessionsGiven !== undefined && (
-                      <div style={{ marginBottom: '8px', color: theme.text }}>
-                        <strong style={{ color: theme.textSecondary }}>Sessions Given:</strong> {data.profile.sessionsGiven}
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>Sessions Given</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>{data.profile.sessionsGiven}</div>
+                      </div>
+                    )}
+                    {data.profile.sessionsReceived !== undefined && (
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>Sessions Received</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>{data.profile.sessionsReceived}</div>
                       </div>
                     )}
                     {data.profile.avgRating !== undefined && data.profile.avgRating > 0 && (
-                      <div style={{ marginBottom: '8px', color: theme.text }}>
-                        <strong style={{ color: theme.textSecondary }}>Average Rating:</strong> {data.profile.avgRating.toFixed(1)}/5
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>Average Rating</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>
+                          {data.profile.avgRating.toFixed(1)}<span style={{ fontSize: '14px', fontWeight: 'normal', color: theme.textSecondary }}>/5</span>
+                        </div>
+                      </div>
+                    )}
+                    {data.profile.npsScore !== undefined && (
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>NPS Score</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>{data.profile.npsScore}</div>
                       </div>
                     )}
                     {data.profile.reputationScore !== undefined && (
-                      <div style={{ marginBottom: '8px', color: theme.text }}>
-                        <strong style={{ color: theme.textSecondary }}>Reputation Score:</strong> {data.profile.reputationScore}
+                      <div style={{ 
+                        padding: '12px', 
+                        backgroundColor: theme.hoverBg, 
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>Reputation Score</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.text }}>{data.profile.reputationScore}</div>
                       </div>
                     )}
                   </div>
-                )}
+                  
+                  {data.profile.topSkillsUsage && data.profile.topSkillsUsage.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>Top Skills Used</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {data.profile.topSkillsUsage.map((item, idx) => (
+                          <div key={idx} style={{
+                            padding: '6px 12px',
+                            backgroundColor: theme.hoverBg,
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            color: theme.text,
+                            border: `1px solid ${theme.borderLight}`
+                          }}>
+                            {item.skill} ({item.count})
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {data.profile.trustEdges && data.profile.trustEdges.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>Trust Relationships</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {data.profile.trustEdges.map((edge, idx) => (
+                          <div key={idx} style={{
+                            padding: '6px 12px',
+                            backgroundColor: theme.hoverBg,
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            color: theme.text,
+                            border: `1px solid ${theme.borderLight}`
+                          }}>
+                            {shortenWallet(edge.toWallet)} (strength: {edge.strength})
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {data.profile.peerTestimonials && data.profile.peerTestimonials.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>Peer Testimonials</div>
+                      {data.profile.peerTestimonials.map((testimonial, idx) => (
+                        <div key={idx} style={{
+                          marginBottom: '12px',
+                          padding: '12px',
+                          backgroundColor: theme.hoverBg,
+                          borderRadius: '6px',
+                          border: `1px solid ${theme.borderLight}`
+                        }}>
+                          <div style={{ fontSize: '12px', color: theme.textSecondary, marginBottom: '4px' }}>
+                            From {shortenWallet(testimonial.fromWallet)} • {new Date(testimonial.timestamp).toLocaleDateString()}
+                          </div>
+                          <div style={{ color: theme.text, fontSize: '14px' }}>{testimonial.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* System Info */}
                 <div style={{ marginBottom: '20px' }}>
@@ -1012,8 +1173,8 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Short Bio</label>
                     <input
                       type="text"
-                      name="bio"
-                      defaultValue={data.profile.bio || ''}
+                      name="bioShort"
+                      defaultValue={data.profile.bioShort || data.profile.bio || ''}
                       placeholder="Brief description"
                       style={{ 
                         width: '100%',
@@ -1376,7 +1537,7 @@ export default function Me() {
                 <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Short Bio</label>
                 <input
                   type="text"
-                  name="bio"
+                  name="bioShort"
                   placeholder="Brief description"
                   style={{ 
                     width: '100%',
@@ -1611,6 +1772,206 @@ export default function Me() {
               {submitting === 'profile' ? 'Creating...' : 'Create Profile'}
             </button>
           </form>
+        )}
+      </section>
+
+      {/* Activity Summary */}
+      <section style={{ 
+        marginBottom: '40px', 
+        padding: '20px', 
+        border: `1px solid ${theme.border}`, 
+        borderRadius: '8px',
+        backgroundColor: theme.cardBg,
+        boxShadow: theme.shadow,
+        transition: 'all 0.3s ease'
+      }}>
+        <h2 style={{ 
+          color: theme.text,
+          marginTop: 0,
+          marginBottom: '20px',
+          transition: 'color 0.3s ease'
+        }}>
+          Activity Summary
+        </h2>
+        
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+          gap: '16px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: theme.hoverBg, 
+            borderRadius: '8px',
+            border: `1px solid ${theme.borderLight}`
+          }}>
+            <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>Total Sessions</div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.text }}>{data.sessions.length}</div>
+            <div style={{ fontSize: '12px', color: theme.textTertiary, marginTop: '4px' }}>
+              {data.sessions.filter(s => s.status === 'completed').length} completed
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: theme.hoverBg, 
+            borderRadius: '8px',
+            border: `1px solid ${theme.borderLight}`
+          }}>
+            <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>As Mentor</div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.text }}>
+              {data.sessions.filter(s => s.mentorWallet === data.wallet).length}
+            </div>
+            <div style={{ fontSize: '12px', color: theme.textTertiary, marginTop: '4px' }}>
+              {data.sessions.filter(s => s.mentorWallet === data.wallet && s.status === 'completed').length} completed
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: theme.hoverBg, 
+            borderRadius: '8px',
+            border: `1px solid ${theme.borderLight}`
+          }}>
+            <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>As Learner</div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.text }}>
+              {data.sessions.filter(s => s.learnerWallet === data.wallet).length}
+            </div>
+            <div style={{ fontSize: '12px', color: theme.textTertiary, marginTop: '4px' }}>
+              {data.sessions.filter(s => s.learnerWallet === data.wallet && s.status === 'completed').length} completed
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '16px', 
+            backgroundColor: theme.hoverBg, 
+            borderRadius: '8px',
+            border: `1px solid ${theme.borderLight}`
+          }}>
+            <div style={{ fontSize: '14px', color: theme.textSecondary, marginBottom: '8px' }}>Feedback Received</div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.text }}>
+              {data.feedback.filter(f => f.toWallet === data.wallet).length}
+            </div>
+            <div style={{ fontSize: '12px', color: theme.textTertiary, marginTop: '4px' }}>
+              Avg: {data.feedback.filter(f => f.toWallet === data.wallet && f.rating).length > 0 
+                ? (data.feedback.filter(f => f.toWallet === data.wallet && f.rating).reduce((sum, f) => sum + (f.rating || 0), 0) / data.feedback.filter(f => f.toWallet === data.wallet && f.rating).length).toFixed(1)
+                : 'N/A'} / 5
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Sessions */}
+        {data.sessions.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>Recent Sessions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {data.sessions
+                .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime())
+                .slice(0, 5)
+                .map((session) => (
+                  <div key={session.key} style={{
+                    padding: '12px',
+                    backgroundColor: theme.hoverBg,
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.borderLight}`,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '14px', color: theme.text, fontWeight: '500', marginBottom: '4px' }}>
+                        {session.skill} • {session.mentorWallet === data.wallet ? 'Mentor' : 'Learner'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: theme.textSecondary }}>
+                        {new Date(session.sessionDate).toLocaleString()} • {session.duration || 60} min
+                      </div>
+                    </div>
+                    <div style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      backgroundColor: session.status === 'completed' ? (darkMode ? '#2d4a2d' : '#d4edda') : 
+                                      session.status === 'scheduled' ? (darkMode ? '#2d3a4a' : '#d1ecf1') :
+                                      session.status === 'in-progress' ? (darkMode ? '#4a3d2d' : '#fff3cd') :
+                                      (darkMode ? '#4a2d2d' : '#f8d7da'),
+                      color: session.status === 'completed' ? (darkMode ? '#90ee90' : '#155724') :
+                             session.status === 'scheduled' ? (darkMode ? '#90c7ee' : '#0c5460') :
+                             session.status === 'in-progress' ? (darkMode ? '#ffd700' : '#856404') :
+                             (darkMode ? '#ff6b6b' : '#721c24'),
+                      fontWeight: '500',
+                      textTransform: 'capitalize'
+                    }}>
+                      {session.status}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Feedback */}
+        {data.feedback.length > 0 && (
+          <div>
+            <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>Recent Feedback</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {data.feedback
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 5)
+                .map((feedback) => (
+                  <div key={feedback.key} style={{
+                    padding: '12px',
+                    backgroundColor: theme.hoverBg,
+                    borderRadius: '6px',
+                    border: `1px solid ${theme.borderLight}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', color: theme.text, fontWeight: '500' }}>
+                          {feedback.role === 'mentor' ? 'Mentor' : 'Learner'} feedback from {shortenWallet(feedback.fromWallet)}
+                        </div>
+                        <div style={{ fontSize: '12px', color: theme.textSecondary }}>
+                          {new Date(feedback.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      {feedback.rating && (
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          backgroundColor: darkMode ? '#2d4a2d' : '#d4edda',
+                          color: darkMode ? '#90ee90' : '#155724'
+                        }}>
+                          {feedback.rating}/5
+                        </div>
+                      )}
+                    </div>
+                    {feedback.text && (
+                      <div style={{ fontSize: '14px', color: theme.text, marginTop: '8px' }}>
+                        {feedback.text}
+                      </div>
+                    )}
+                    {feedback.skills && feedback.skills.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                        {feedback.skills.map((skill, idx) => (
+                          <span key={idx} style={{
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            fontSize: '11px',
+                            backgroundColor: theme.cardBg,
+                            color: theme.textSecondary,
+                            border: `1px solid ${theme.borderLight}`
+                          }}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
         )}
       </section>
 
