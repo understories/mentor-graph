@@ -8,7 +8,8 @@ export type UserProfile = {
   displayName: string;
   username?: string;
   profileImage?: string;
-  bio?: string;
+  bio?: string; // Legacy: kept for backward compatibility
+  bioShort?: string; // Short bio (spec requirement)
   bioLong?: string;
   timezone: string;
   languages?: string[];
@@ -34,7 +35,7 @@ export type UserProfile = {
   npsScore?: number;
   topSkillsUsage?: Array<{ skill: string; count: number }>;
   peerTestimonials?: Array<{ text: string; timestamp: string; fromWallet: string }>;
-  trustEdges?: string[]; // References to other wallet addresses
+  trustEdges?: Array<{ toWallet: string; strength: number; createdAt: string }>; // Trust relationships as objects
   // Derived / System Fields
   lastActiveTimestamp?: string;
   communityAffiliations?: string[];
@@ -51,6 +52,7 @@ export async function createUserProfile({
   username,
   profileImage,
   bio,
+  bioShort,
   bioLong,
   skills = '',
   skillsArray,
@@ -67,7 +69,8 @@ export async function createUserProfile({
   displayName: string;
   username?: string;
   profileImage?: string;
-  bio?: string;
+  bio?: string; // Legacy
+  bioShort?: string;
   bioLong?: string;
   skills?: string;
   skillsArray?: string[];
@@ -98,7 +101,8 @@ export async function createUserProfile({
     displayName,
     username,
     profileImage,
-    bio,
+    bio, // Legacy: keep for backward compatibility
+    bioShort: bioShort || bio, // Use bioShort if provided, fallback to bio
     bioLong,
     skills: finalSkillsArray.join(', '), // Keep backward compatibility
     skillsArray: finalSkillsArray,
@@ -120,7 +124,7 @@ export async function createUserProfile({
     npsScore: 0,
     topSkillsUsage: [],
     peerTestimonials: [],
-    trustEdges: [],
+    trustEdges: [], // Array of { toWallet, strength, createdAt } objects
     communityAffiliations: [],
     reputationScore: 0,
   };
@@ -204,13 +208,25 @@ export async function listUserProfiles(skill?: string): Promise<UserProfile[]> {
     }
     const finalSkillsArray = payload.skillsArray || skillsArray.length > 0 ? skillsArray : (payload.skills ? payload.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
 
+    // Handle trustEdges: convert legacy string[] to object[] if needed
+    let trustEdges = payload.trustEdges || [];
+    if (Array.isArray(trustEdges) && trustEdges.length > 0 && typeof trustEdges[0] === 'string') {
+      // Legacy format: convert string[] to object[]
+      trustEdges = trustEdges.map((wallet: string) => ({
+        toWallet: wallet,
+        strength: 1,
+        createdAt: new Date().toISOString(),
+      }));
+    }
+
     return {
       key: entity.key,
       wallet: getAttr('wallet') || payload.wallet || '',
       displayName: getAttr('displayName') || payload.displayName || '',
       username: payload.username || getAttr('username') || undefined,
       profileImage: payload.profileImage || undefined,
-      bio: payload.bio || getAttr('bio') || undefined,
+      bio: payload.bio || getAttr('bio') || undefined, // Legacy
+      bioShort: payload.bioShort || payload.bio || getAttr('bio') || undefined,
       bioLong: payload.bioLong || undefined,
       skills: getAttr('skills') || payload.skills || '',
       skillsArray: finalSkillsArray,
@@ -228,7 +244,7 @@ export async function listUserProfiles(skill?: string): Promise<UserProfile[]> {
       npsScore: payload.npsScore || 0,
       topSkillsUsage: payload.topSkillsUsage || [],
       peerTestimonials: payload.peerTestimonials || [],
-      trustEdges: payload.trustEdges || [],
+      trustEdges: trustEdges as Array<{ toWallet: string; strength: number; createdAt: string }>,
       lastActiveTimestamp: payload.lastActiveTimestamp || undefined,
       communityAffiliations: payload.communityAffiliations || [],
       reputationScore: payload.reputationScore || 0,
@@ -285,13 +301,25 @@ export async function listUserProfilesForWallet(wallet: string): Promise<UserPro
     }
     const finalSkillsArray = payload.skillsArray || skillsArray.length > 0 ? skillsArray : (payload.skills ? payload.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
 
+    // Handle trustEdges: convert legacy string[] to object[] if needed
+    let trustEdges = payload.trustEdges || [];
+    if (Array.isArray(trustEdges) && trustEdges.length > 0 && typeof trustEdges[0] === 'string') {
+      // Legacy format: convert string[] to object[]
+      trustEdges = trustEdges.map((wallet: string) => ({
+        toWallet: wallet,
+        strength: 1,
+        createdAt: new Date().toISOString(),
+      }));
+    }
+
     return {
       key: entity.key,
       wallet: getAttr('wallet') || payload.wallet || '',
       displayName: getAttr('displayName') || payload.displayName || '',
       username: payload.username || getAttr('username') || undefined,
       profileImage: payload.profileImage || undefined,
-      bio: payload.bio || getAttr('bio') || undefined,
+      bio: payload.bio || getAttr('bio') || undefined, // Legacy
+      bioShort: payload.bioShort || payload.bio || getAttr('bio') || undefined,
       bioLong: payload.bioLong || undefined,
       skills: getAttr('skills') || payload.skills || '',
       skillsArray: finalSkillsArray,
@@ -309,7 +337,7 @@ export async function listUserProfilesForWallet(wallet: string): Promise<UserPro
       npsScore: payload.npsScore || 0,
       topSkillsUsage: payload.topSkillsUsage || [],
       peerTestimonials: payload.peerTestimonials || [],
-      trustEdges: payload.trustEdges || [],
+      trustEdges: trustEdges as Array<{ toWallet: string; strength: number; createdAt: string }>,
       lastActiveTimestamp: payload.lastActiveTimestamp || undefined,
       communityAffiliations: payload.communityAffiliations || [],
       reputationScore: payload.reputationScore || 0,
@@ -340,6 +368,7 @@ export async function updateUserProfile({
   username,
   profileImage,
   bio,
+  bioShort,
   bioLong,
   skills = '',
   skillsArray,
@@ -356,7 +385,8 @@ export async function updateUserProfile({
   displayName: string;
   username?: string;
   profileImage?: string;
-  bio?: string;
+  bio?: string; // Legacy
+  bioShort?: string;
   bioLong?: string;
   skills?: string;
   skillsArray?: string[];
@@ -381,6 +411,7 @@ export async function updateUserProfile({
     username,
     profileImage,
     bio,
+    bioShort,
     bioLong,
     skills,
     skillsArray,
