@@ -19,6 +19,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "npx tsx scripts/seedDummyData.ts"
+    "seed": "npx tsx scripts/seedDummyData.ts",
+    "seed:simple": "npx tsx scripts/seedSimple.ts"
   }
 }
