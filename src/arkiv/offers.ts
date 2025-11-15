@@ -52,17 +52,22 @@ export async function createOffer({
   return { key: entityKey, txHash };
 }
 
-export async function listOffers(): Promise<Offer[]> {
+export async function listOffers(params?: { skill?: string; spaceId?: string }): Promise<Offer[]> {
   const publicClient = getPublicClient();
   const query = publicClient.buildQuery();
-  const result = await query
-    .where(eq('type', 'offer'))
+  let queryBuilder = query.where(eq('type', 'offer')).where(eq('status', 'active'));
+  
+  if (params?.spaceId) {
+    queryBuilder = queryBuilder.where(eq('spaceId', params.spaceId));
+  }
+  
+  const result = await queryBuilder
     .withAttributes(true)
     .withPayload(true)
     .limit(100)
     .fetch();
 
-  return result.entities.map((entity: any) => {
+  let offers = result.entities.map((entity: any) => {
     let payload: any = {};
     try {
       if (entity.payload) {
@@ -90,6 +95,13 @@ export async function listOffers(): Promise<Offer[]> {
       txHash: payload.txHash,
     };
   });
+
+  if (params?.skill) {
+    const skillLower = params.skill.toLowerCase();
+    offers = offers.filter(offer => offer.skill.toLowerCase().includes(skillLower));
+  }
+
+  return offers;
 }
 
 export async function listOffersForWallet(wallet: string): Promise<Offer[]> {
