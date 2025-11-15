@@ -48,6 +48,20 @@ export async function createAsk({
     expiresIn: ASK_TTL_SECONDS,
   });
 
+  await walletClient.createEntity({
+    payload: enc.encode(JSON.stringify({
+      txHash,
+    })),
+    contentType: 'application/json',
+    attributes: [
+      { key: 'type', value: 'ask_txhash' },
+      { key: 'askKey', value: entityKey },
+      { key: 'wallet', value: wallet },
+      { key: 'spaceId', value: spaceId },
+    ],
+    expiresIn: ASK_TTL_SECONDS,
+  });
+
   return { key: entityKey, txHash };
 }
 
@@ -60,11 +74,46 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
     queryBuilder = queryBuilder.where(eq('spaceId', params.spaceId));
   }
   
-  const result = await queryBuilder
-    .withAttributes(true)
-    .withPayload(true)
-    .limit(100)
-    .fetch();
+  const [result, txHashResult] = await Promise.all([
+    queryBuilder.withAttributes(true).withPayload(true).limit(100).fetch(),
+    publicClient.buildQuery()
+      .where(eq('type', 'ask_txhash'))
+      .withAttributes(true)
+      .withPayload(true)
+      .limit(100)
+      .fetch(),
+  ]);
+
+  const txHashMap: Record<string, string> = {};
+  txHashResult.entities.forEach((entity: any) => {
+    const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    const askKey = getAttr('askKey');
+    if (askKey) {
+      let payload: any = {};
+      try {
+        if (entity.payload) {
+          const decoded = entity.payload instanceof Uint8Array
+            ? new TextDecoder().decode(entity.payload)
+            : typeof entity.payload === 'string'
+            ? entity.payload
+            : JSON.stringify(entity.payload);
+          payload = JSON.parse(decoded);
+        }
+      } catch (e) {
+        console.error('Error decoding txHash payload:', e);
+      }
+      if (payload.txHash) {
+        txHashMap[askKey] = payload.txHash;
+      }
+    }
+  });
 
   let asks = result.entities.map((entity: any) => {
     let payload: any = {};
@@ -99,7 +148,7 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       ttlSeconds: ASK_TTL_SECONDS,
-      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
+      txHash: txHashMap[entity.key] || getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 
@@ -114,13 +163,53 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
 export async function listAsksForWallet(wallet: string): Promise<Ask[]> {
   const publicClient = getPublicClient();
   const query = publicClient.buildQuery();
-  const result = await query
-    .where(eq('type', 'ask'))
-    .where(eq('wallet', wallet))
-    .withAttributes(true)
-    .withPayload(true)
-    .limit(100)
-    .fetch();
+  const [result, txHashResult] = await Promise.all([
+    query
+      .where(eq('type', 'ask'))
+      .where(eq('wallet', wallet))
+      .withAttributes(true)
+      .withPayload(true)
+      .limit(100)
+      .fetch(),
+    publicClient.buildQuery()
+      .where(eq('type', 'ask_txhash'))
+      .where(eq('wallet', wallet))
+      .withAttributes(true)
+      .withPayload(true)
+      .limit(100)
+      .fetch(),
+  ]);
+
+  const txHashMap: Record<string, string> = {};
+  txHashResult.entities.forEach((entity: any) => {
+    const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    const askKey = getAttr('askKey');
+    if (askKey) {
+      let payload: any = {};
+      try {
+        if (entity.payload) {
+          const decoded = entity.payload instanceof Uint8Array
+            ? new TextDecoder().decode(entity.payload)
+            : typeof entity.payload === 'string'
+            ? entity.payload
+            : JSON.stringify(entity.payload);
+          payload = JSON.parse(decoded);
+        }
+      } catch (e) {
+        console.error('Error decoding txHash payload:', e);
+      }
+      if (payload.txHash) {
+        txHashMap[askKey] = payload.txHash;
+      }
+    }
+  });
 
   return result.entities.map((entity: any) => {
     let payload: any = {};
@@ -155,7 +244,7 @@ export async function listAsksForWallet(wallet: string): Promise<Ask[]> {
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       ttlSeconds: ASK_TTL_SECONDS,
-      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
+      txHash: txHashMap[entity.key] || getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 }
