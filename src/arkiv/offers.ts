@@ -83,13 +83,21 @@ export async function listOffers(params?: { skill?: string; spaceId?: string }):
     }
 
     const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    
     return {
       key: entity.key,
-      wallet: attrs.wallet || '',
-      skill: attrs.skill || '',
-      spaceId: attrs.spaceId || 'local-dev',
-      createdAt: attrs.createdAt || '',
-      status: attrs.status || 'active',
+      wallet: getAttr('wallet') || payload.wallet || '',
+      skill: getAttr('skill') || payload.skill || '',
+      spaceId: getAttr('spaceId') || payload.spaceId || 'local-dev',
+      createdAt: getAttr('createdAt') || payload.createdAt || '',
+      status: getAttr('status') || payload.status || 'active',
       message: payload.message || '',
       availabilityWindow: payload.availabilityWindow || '',
       txHash: payload.txHash,
@@ -131,13 +139,21 @@ export async function listOffersForWallet(wallet: string): Promise<Offer[]> {
     }
 
     const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    
     return {
       key: entity.key,
-      wallet: attrs.wallet || '',
-      skill: attrs.skill || '',
-      spaceId: attrs.spaceId || 'local-dev',
-      createdAt: attrs.createdAt || '',
-      status: attrs.status || 'active',
+      wallet: getAttr('wallet') || payload.wallet || '',
+      skill: getAttr('skill') || payload.skill || '',
+      spaceId: getAttr('spaceId') || payload.spaceId || 'local-dev',
+      createdAt: getAttr('createdAt') || payload.createdAt || '',
+      status: getAttr('status') || payload.status || 'active',
       message: payload.message || '',
       availabilityWindow: payload.availabilityWindow || '',
       txHash: payload.txHash,

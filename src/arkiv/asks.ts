@@ -79,13 +79,21 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
     }
 
     const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    
     return {
       key: entity.key,
-      wallet: attrs.wallet || '',
-      skill: attrs.skill || '',
-      spaceId: attrs.spaceId || 'local-dev',
-      createdAt: attrs.createdAt || '',
-      status: attrs.status || 'open',
+      wallet: getAttr('wallet') || payload.wallet || '',
+      skill: getAttr('skill') || payload.skill || '',
+      spaceId: getAttr('spaceId') || payload.spaceId || 'local-dev',
+      createdAt: getAttr('createdAt') || payload.createdAt || '',
+      status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       txHash: payload.txHash,
     };
@@ -126,13 +134,21 @@ export async function listAsksForWallet(wallet: string): Promise<Ask[]> {
     }
 
     const attrs = entity.attributes || {};
+    const getAttr = (key: string) => {
+      if (Array.isArray(attrs)) {
+        const attr = attrs.find((a: any) => a.key === key);
+        return attr?.value || '';
+      }
+      return attrs[key] || '';
+    };
+    
     return {
       key: entity.key,
-      wallet: attrs.wallet || '',
-      skill: attrs.skill || '',
-      spaceId: attrs.spaceId || 'local-dev',
-      createdAt: attrs.createdAt || '',
-      status: attrs.status || 'open',
+      wallet: getAttr('wallet') || payload.wallet || '',
+      skill: getAttr('skill') || payload.skill || '',
+      spaceId: getAttr('spaceId') || payload.spaceId || 'local-dev',
+      createdAt: getAttr('createdAt') || payload.createdAt || '',
+      status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       txHash: payload.txHash,
     };
