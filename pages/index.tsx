@@ -6,6 +6,7 @@ export default function Home() {
   const router = useRouter();
   const [darkMode, setDarkMode] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [loadingExample, setLoadingExample] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleConnect = async () => {
@@ -21,6 +22,29 @@ export default function Home() {
       console.error('Failed to connect wallet:', err);
       setError(err.message || 'Failed to connect wallet');
       setConnecting(false);
+    }
+  };
+
+  const handleExampleWallet = async () => {
+    try {
+      setLoadingExample(true);
+      setError(null);
+      const res = await fetch('/api/wallet');
+      if (!res.ok) {
+        throw new Error('Failed to fetch example wallet');
+      }
+      const data = await res.json();
+      if (!data.address) {
+        throw new Error('No example wallet available');
+      }
+      // Store wallet address in localStorage for session persistence
+      localStorage.setItem('connectedWallet', data.address);
+      // Redirect to dashboard
+      router.push('/me');
+    } catch (err: any) {
+      console.error('Failed to load example wallet:', err);
+      setError(err.message || 'Failed to load example wallet');
+      setLoadingExample(false);
     }
   };
 
@@ -172,34 +196,102 @@ export default function Home() {
             {error}
           </div>
         )}
-        <button
-          onClick={handleConnect}
-          disabled={connecting}
-          style={{
-            padding: '16px 36px',
-            fontSize: '20px',
-            fontWeight: '500',
-            backgroundColor: connecting ? '#888' : '#0066cc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: connecting ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.2s',
-            opacity: connecting ? 0.7 : 1,
-          }}
-          onMouseOver={(e) => {
-            if (!connecting) {
-              e.currentTarget.style.backgroundColor = '#0052a3';
-            }
-          }}
-          onMouseOut={(e) => {
-            if (!connecting) {
-              e.currentTarget.style.backgroundColor = '#0066cc';
-            }
-          }}
-        >
-          {connecting ? 'Connecting...' : 'Connect Wallet'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={handleConnect}
+            disabled={connecting || loadingExample}
+            style={{
+              padding: '16px 36px',
+              fontSize: '20px',
+              fontWeight: '500',
+              backgroundColor: (connecting || loadingExample) ? '#888' : '#0066cc',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: (connecting || loadingExample) ? 'not-allowed' : 'pointer',
+              transition: 'background-color 0.2s',
+              opacity: (connecting || loadingExample) ? 0.7 : 1,
+              width: '100%',
+              maxWidth: '300px',
+            }}
+            onMouseOver={(e) => {
+              if (!connecting && !loadingExample) {
+                e.currentTarget.style.backgroundColor = '#0052a3';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!connecting && !loadingExample) {
+                e.currentTarget.style.backgroundColor = '#0066cc';
+              }
+            }}
+          >
+            {connecting ? 'Connecting...' : 'Connect Wallet'}
+          </button>
+          
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px', 
+            width: '100%', 
+            maxWidth: '300px',
+            marginTop: '8px'
+          }}>
+            <div style={{ 
+              flex: 1, 
+              height: '1px', 
+              backgroundColor: darkMode ? '#444' : '#ddd' 
+            }}></div>
+            <span style={{ 
+              color: theme.textSecondary, 
+              fontSize: '14px' 
+            }}>or</span>
+            <div style={{ 
+              flex: 1, 
+              height: '1px', 
+              backgroundColor: darkMode ? '#444' : '#ddd' 
+            }}></div>
+          </div>
+          
+          <button
+            onClick={handleExampleWallet}
+            disabled={connecting || loadingExample}
+            style={{
+              padding: '14px 32px',
+              fontSize: '18px',
+              fontWeight: '500',
+              backgroundColor: (connecting || loadingExample) ? '#888' : (darkMode ? '#2a2a2a' : '#f0f0f0'),
+              color: (connecting || loadingExample) ? '#aaa' : theme.text,
+              border: `1px solid ${darkMode ? '#444' : '#ddd'}`,
+              borderRadius: '6px',
+              cursor: (connecting || loadingExample) ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              opacity: (connecting || loadingExample) ? 0.7 : 1,
+              width: '100%',
+              maxWidth: '300px',
+            }}
+            onMouseOver={(e) => {
+              if (!connecting && !loadingExample) {
+                e.currentTarget.style.backgroundColor = darkMode ? '#3a3a3a' : '#e0e0e0';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!connecting && !loadingExample) {
+                e.currentTarget.style.backgroundColor = darkMode ? '#2a2a2a' : '#f0f0f0';
+              }
+            }}
+          >
+            {loadingExample ? 'Loading...' : 'Log in with Example Wallet'}
+          </button>
+          <p style={{
+            fontSize: '13px',
+            color: theme.textTertiary,
+            marginTop: '4px',
+            textAlign: 'center',
+            maxWidth: '300px',
+          }}>
+            Try the demo without MetaMask
+          </p>
+        </div>
       </div>
     </main>
   );
