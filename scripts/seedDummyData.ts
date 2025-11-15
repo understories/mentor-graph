@@ -15,6 +15,30 @@ const generateWallet = (index: number) => `0x${'0'.repeat(40 - index.toString().
 // Using 100ms delay = 10 requests/second (well under limit)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Retry function with exponential backoff for rate limit errors
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  initialDelay: number = 1000
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isRateLimit = error?.cause?.status === 429 || error?.message?.includes('rate limit');
+      
+      if (isRateLimit && i < maxRetries - 1) {
+        const delayMs = initialDelay * Math.pow(2, i); // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+        console.log(`⏳ Rate limit hit, waiting ${delayMs}ms before retry ${i + 1}/${maxRetries}...`);
+        await delay(delayMs);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 async function seedDummyData() {
   console.log('🌱 Seeding dummy data for MentorGraph...');
   console.log(`Using wallet: ${CURRENT_WALLET}`);
@@ -23,7 +47,7 @@ async function seedDummyData() {
     // 1. Create a comprehensive user profile
     console.log('\n📝 Creating user profile...');
     // No delay needed before first operation
-    const profileResult = await createUserProfile({
+    const profileResult = await retryWithBackoff(() => createUserProfile({
       wallet: CURRENT_WALLET,
       displayName: 'Alex Mentor',
       username: 'alex_mentor',
@@ -59,13 +83,13 @@ async function seedDummyData() {
 
     for (const ask of asks) {
       await delay(100); // 100ms delay = 10 req/s (well under 50 RPS limit)
-      const result = await createAsk({
+      const result = await retryWithBackoff(() => createAsk({
         wallet: CURRENT_WALLET,
         skill: ask.skill,
         message: ask.message,
         privateKey: ARKIV_PRIVATE_KEY,
         expiresIn: ask.expiresIn,
-      });
+      }));
       console.log(`✅ Ask created: ${result.key} (${ask.skill})`);
     }
 
@@ -80,14 +104,14 @@ async function seedDummyData() {
 
     for (const offer of offers) {
       await delay(100); // 100ms delay = 10 req/s (well under 50 RPS limit)
-      const result = await createOffer({
+      const result = await retryWithBackoff(() => createOffer({
         wallet: CURRENT_WALLET,
         skill: offer.skill,
         message: offer.message,
         availabilityWindow: offer.availabilityWindow,
         privateKey: ARKIV_PRIVATE_KEY,
         expiresIn: offer.expiresIn,
-      });
+      }));
       console.log(`✅ Offer created: ${result.key} (${offer.skill})`);
     }
 
@@ -128,7 +152,7 @@ async function seedDummyData() {
     const sessionKeys: string[] = [];
     for (const session of sessions) {
       await delay(100); // 100ms delay = 10 req/s (well under 50 RPS limit)
-      const result = await createSession(session);
+      const result = await retryWithBackoff(() => createSession(session));
       sessionKeys.push(result.key);
       console.log(`✅ Session created: ${result.key}`);
     }
@@ -176,7 +200,7 @@ async function seedDummyData() {
 
     for (const feedback of feedbacks) {
       await delay(100); // 100ms delay = 10 req/s (well under 50 RPS limit)
-      const result = await createFeedback(feedback);
+      const result = await retryWithBackoff(() => createFeedback(feedback));
       console.log(`✅ Feedback created: ${result.key}`);
     }
 
@@ -211,7 +235,7 @@ async function seedDummyData() {
 
     for (const edge of trustEdges) {
       await delay(100); // 100ms delay = 10 req/s (well under 50 RPS limit)
-      const result = await createTrustEdge(edge);
+      const result = await retryWithBackoff(() => createTrustEdge(edge));
       console.log(`✅ Trust edge created: ${result.key}`);
     }
 
