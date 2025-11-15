@@ -1,6 +1,8 @@
 import { eq } from "@arkiv-network/sdk/query"
 import { getPublicClient, getWalletClientFromPrivateKey } from "./client"
 
+export const ASK_TTL_SECONDS = 3600;
+
 export type Ask = {
   key: string;
   wallet: string;
@@ -9,6 +11,7 @@ export type Ask = {
   createdAt: string;
   status: string;
   message: string;
+  ttlSeconds: number;
   txHash?: string;
 }
 
@@ -42,7 +45,7 @@ export async function createAsk({
       { key: 'createdAt', value: createdAt },
       { key: 'status', value: status },
     ],
-    expiresIn: 3600, // 1 hour
+    expiresIn: ASK_TTL_SECONDS,
   });
 
   return { key: entityKey, txHash };
@@ -95,6 +98,7 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
       createdAt: getAttr('createdAt') || payload.createdAt || '',
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
+      ttlSeconds: ASK_TTL_SECONDS,
       txHash: payload.txHash,
     };
   });
@@ -150,6 +154,7 @@ export async function listAsksForWallet(wallet: string): Promise<Ask[]> {
       createdAt: getAttr('createdAt') || payload.createdAt || '',
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
+      ttlSeconds: ASK_TTL_SECONDS,
       txHash: payload.txHash,
     };
   });
