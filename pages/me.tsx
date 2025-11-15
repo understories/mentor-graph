@@ -343,11 +343,18 @@ export default function Me() {
                   {(ask.txHash || txHashMap[ask.key]) && (
                     <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
                       <strong>Tx:</strong>{' '}
-                      <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
-                            onClick={() => copyToClipboard(ask.txHash || txHashMap[ask.key]!)}
-                            title="Click to copy full hash">
+                      <a
+                        href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${ask.txHash || txHashMap[ask.key]!}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', textDecoration: 'none', color: '#0066cc' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(ask.txHash || txHashMap[ask.key]!);
+                        }}
+                        title="Click to open in explorer (copies hash to clipboard)">
                         {shortenHash(ask.txHash || txHashMap[ask.key]!)}
-                      </code>
+                      </a>
                     </div>
                   )}
                 </li>
@@ -406,11 +413,18 @@ export default function Me() {
                   {(offer.txHash || txHashMap[offer.key]) && (
                     <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
                       <strong>Tx:</strong>{' '}
-                      <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
-                            onClick={() => copyToClipboard(offer.txHash || txHashMap[offer.key]!)}
-                            title="Click to copy full hash">
+                      <a
+                        href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${offer.txHash || txHashMap[offer.key]!}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', textDecoration: 'none', color: '#0066cc' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(offer.txHash || txHashMap[offer.key]!);
+                        }}
+                        title="Click to open in explorer (copies hash to clipboard)">
                         {shortenHash(offer.txHash || txHashMap[offer.key]!)}
-                      </code>
+                      </a>
                     </div>
                   )}
                 </li>
