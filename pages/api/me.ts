@@ -16,9 +16,60 @@ export default async function handler(req: any, res: any) {
         listFeedbackForWallet(CURRENT_WALLET),
       ]);
 
+      // Compute reputation metadata from sessions and feedback
+      const sessionsCompleted = sessions.filter(s => s.status === 'completed').length;
+      const sessionsGiven = sessions.filter(s => s.mentorWallet === CURRENT_WALLET && s.status === 'completed').length;
+      const sessionsReceived = sessions.filter(s => s.learnerWallet === CURRENT_WALLET && s.status === 'completed').length;
+      
+      const ratingsForWallet = feedback.filter(f => f.toWallet === CURRENT_WALLET && f.rating).map(f => f.rating!);
+      const avgRating = ratingsForWallet.length > 0 
+        ? ratingsForWallet.reduce((sum, r) => sum + r, 0) / ratingsForWallet.length 
+        : 0;
+      
+      const npsScores = feedback.filter(f => f.toWallet === CURRENT_WALLET && f.npsScore !== undefined).map(f => f.npsScore!);
+      const npsScore = npsScores.length > 0
+        ? npsScores.reduce((sum, n) => sum + n, 0) / npsScores.length
+        : 0;
+
+      // Compute topSkillsUsage from sessions
+      const skillCounts: Record<string, number> = {};
+      sessions.filter(s => s.status === 'completed').forEach(s => {
+        skillCounts[s.skill] = (skillCounts[s.skill] || 0) + 1;
+      });
+      const topSkillsUsage = Object.entries(skillCounts)
+        .map(([skill, count]) => ({ skill, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      // Extract peerTestimonials from feedback
+      const peerTestimonials = feedback
+        .filter(f => f.toWallet === CURRENT_WALLET && f.text)
+        .map(f => ({
+          text: f.text!,
+          timestamp: f.createdAt,
+          fromWallet: f.fromWallet,
+        }));
+
+      // Compute reputationScore (simple formula: sessions * avgRating * 10)
+      const reputationScore = Math.round(sessionsCompleted * avgRating * 10);
+
+      // Merge computed fields into profile if it exists
+      const enrichedProfile = profile ? {
+        ...profile,
+        sessionsCompleted,
+        sessionsGiven,
+        sessionsReceived,
+        avgRating: Math.round(avgRating * 10) / 10, // Round to 1 decimal
+        npsScore: Math.round(npsScore),
+        topSkillsUsage,
+        peerTestimonials,
+        reputationScore,
+        lastActiveTimestamp: new Date().toISOString(),
+      } : null;
+
       res.json({
         wallet: CURRENT_WALLET,
-        profile,
+        profile: enrichedProfile,
         asks,
         offers,
         sessions,
