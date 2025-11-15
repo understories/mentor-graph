@@ -69,7 +69,7 @@ async function seedDummyData() {
       mentorRoles: ['technical mentor', 'code review', 'architecture'],
       learnerRoles: ['design patterns', 'scaling'],
       privateKey: ARKIV_PRIVATE_KEY,
-    });
+    }));
     console.log(`✅ Profile created: ${profileResult.key}`);
 
     // 2. Create multiple asks
