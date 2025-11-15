@@ -104,7 +104,7 @@ export async function listOffers(params?: { skill?: string; spaceId?: string }):
       message: payload.message || '',
       availabilityWindow: payload.availabilityWindow || '',
       ttlSeconds: OFFER_TTL_SECONDS,
-      txHash: payload.txHash,
+      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 
@@ -161,7 +161,7 @@ export async function listOffersForWallet(wallet: string): Promise<Offer[]> {
       message: payload.message || '',
       availabilityWindow: payload.availabilityWindow || '',
       ttlSeconds: OFFER_TTL_SECONDS,
-      txHash: payload.txHash,
+      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 }

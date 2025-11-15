@@ -99,7 +99,7 @@ export async function listAsks(params?: { skill?: string; spaceId?: string }): P
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       ttlSeconds: ASK_TTL_SECONDS,
-      txHash: payload.txHash,
+      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 
@@ -155,7 +155,7 @@ export async function listAsksForWallet(wallet: string): Promise<Ask[]> {
       status: getAttr('status') || payload.status || 'open',
       message: payload.message || '',
       ttlSeconds: ASK_TTL_SECONDS,
-      txHash: payload.txHash,
+      txHash: getAttr('txHash') || payload.txHash || (entity as any).txHash || undefined,
     };
   });
 }

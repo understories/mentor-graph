@@ -39,26 +39,26 @@ export default async function handler(req: any, res: any) {
         if (!skill || !message) {
           return res.status(400).json({ ok: false, error: 'skill and message are required' });
         }
-        await createAsk({
+        const { key, txHash } = await createAsk({
           wallet: CURRENT_WALLET,
           skill,
           message,
           privateKey: ARKIV_PRIVATE_KEY,
         });
-        res.json({ ok: true });
+        res.json({ ok: true, key, txHash });
       } else if (action === 'createOffer') {
         const { skill, message, availabilityWindow } = req.body;
         if (!skill || !message || !availabilityWindow) {
           return res.status(400).json({ ok: false, error: 'skill, message, and availabilityWindow are required' });
         }
-        await createOffer({
+        const { key, txHash } = await createOffer({
           wallet: CURRENT_WALLET,
           skill,
           message,
           availabilityWindow,
           privateKey: ARKIV_PRIVATE_KEY,
         });
-        res.json({ ok: true });
+        res.json({ ok: true, key, txHash });
       } else {
         return res.status(400).json({ ok: false, error: 'Invalid action' });
       }

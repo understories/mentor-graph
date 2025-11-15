@@ -19,6 +19,7 @@ type Ask = {
   status: string;
   message: string;
   ttlSeconds: number;
+  txHash?: string;
 };
 
 type Offer = {
@@ -31,6 +32,7 @@ type Offer = {
   message: string;
   availabilityWindow: string;
   ttlSeconds: number;
+  txHash?: string;
 };
 
 type MeData = {
@@ -63,12 +65,22 @@ function formatTimeRemaining(createdAt: string, ttlSeconds: number): string {
   }
 }
 
+function shortenHash(hash: string): string {
+  if (!hash || hash.length < 10) return hash;
+  return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+}
+
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+
 export default function Me() {
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [, setNow] = useState(Date.now());
+  const [txHashMap, setTxHashMap] = useState<Record<string, string>>({});
 
   const fetchMe = async () => {
     try {
@@ -166,6 +178,9 @@ export default function Me() {
       if (res.ok) {
         const result = await res.json();
         console.log('Ask created:', result);
+        if (result.key && result.txHash) {
+          setTxHashMap(prev => ({ ...prev, [result.key]: result.txHash }));
+        }
         (e.target as HTMLFormElement).reset();
         fetchMe();
       } else {
@@ -207,6 +222,9 @@ export default function Me() {
       if (res.ok) {
         const result = await res.json();
         console.log('Offer created:', result);
+        if (result.key && result.txHash) {
+          setTxHashMap(prev => ({ ...prev, [result.key]: result.txHash }));
+        }
         (e.target as HTMLFormElement).reset();
         fetchMe();
       } else {
@@ -322,6 +340,16 @@ export default function Me() {
                       </div>
                     </>
                   )}
+                  {(ask.txHash || txHashMap[ask.key]) && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                      <strong>Tx:</strong>{' '}
+                      <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
+                            onClick={() => copyToClipboard(ask.txHash || txHashMap[ask.key]!)}
+                            title="Click to copy full hash">
+                        {shortenHash(ask.txHash || txHashMap[ask.key]!)}
+                      </code>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -374,6 +402,16 @@ export default function Me() {
                         {formatTimeRemaining(offer.createdAt, offer.ttlSeconds)}
                       </div>
                     </>
+                  )}
+                  {(offer.txHash || txHashMap[offer.key]) && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                      <strong>Tx:</strong>{' '}
+                      <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
+                            onClick={() => copyToClipboard(offer.txHash || txHashMap[offer.key]!)}
+                            title="Click to copy full hash">
+                        {shortenHash(offer.txHash || txHashMap[offer.key]!)}
+                      </code>
+                    </div>
                   )}
                 </li>
               ))}

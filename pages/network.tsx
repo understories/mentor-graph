@@ -9,6 +9,7 @@ type Ask = {
   status: string;
   message: string;
   ttlSeconds: number;
+  txHash?: string;
 };
 
 type Offer = {
@@ -21,6 +22,7 @@ type Offer = {
   message: string;
   availabilityWindow: string;
   ttlSeconds: number;
+  txHash?: string;
 };
 
 function formatTimeRemaining(createdAt: string, ttlSeconds: number): string {
@@ -44,6 +46,15 @@ function formatTimeRemaining(createdAt: string, ttlSeconds: number): string {
   } else {
     return `⏰ ${seconds}s remaining`;
   }
+}
+
+function shortenHash(hash: string): string {
+  if (!hash || hash.length < 10) return hash;
+  return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+}
+
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
 }
 
 export default function Network() {
@@ -143,6 +154,16 @@ export default function Network() {
                     {formatTimeRemaining(ask.createdAt, ask.ttlSeconds)}
                   </div>
                 )}
+                {ask.txHash && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                    <strong>Tx:</strong>{' '}
+                    <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
+                          onClick={() => copyToClipboard(ask.txHash!)}
+                          title="Click to copy full hash">
+                      {shortenHash(ask.txHash)}
+                    </code>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -175,6 +196,16 @@ export default function Network() {
                 {offer.createdAt && (
                   <div style={{ marginTop: '8px', padding: '5px', background: '#f0f0f0', borderRadius: '3px', color: '#666' }}>
                     {formatTimeRemaining(offer.createdAt, offer.ttlSeconds)}
+                  </div>
+                )}
+                {offer.txHash && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                    <strong>Tx:</strong>{' '}
+                    <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer' }}
+                          onClick={() => copyToClipboard(offer.txHash!)}
+                          title="Click to copy full hash">
+                      {shortenHash(offer.txHash)}
+                    </code>
                   </div>
                 )}
               </li>
