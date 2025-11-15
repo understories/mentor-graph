@@ -51,3 +51,10 @@ Implemented:
   - compute `expiresAt = createdAt + ttlSeconds`
   - derive a live “expires in X min” label using a 10s interval
   - hide expired asks/offers from the global network view
+
+## Phase 5: Value Infusion
+
+In Progress:
+- Verifiability
+    - Display transaction hashes for all transactions
+        Note: As entity does not store transaction hash, we need to make workarounds. First workaround is to display a copyable Tx immediately after creation (lost after page refresh).
