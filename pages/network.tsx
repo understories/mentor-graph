@@ -94,6 +94,7 @@ export default function Network() {
   const [minSessionsFilter, setMinSessionsFilter] = useState<string>('');
   const [minRatingFilter, setMinRatingFilter] = useState<string>('');
   const [maxRatingFilter, setMaxRatingFilter] = useState<string>('');
+  const [minNpsFilter, setMinNpsFilter] = useState<string>('');
   const [ttlFilter, setTtlFilter] = useState<string>(''); // 'active' | 'expiring' | 'all'
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [userWallet, setUserWallet] = useState<string>('');
@@ -130,6 +131,7 @@ export default function Network() {
     minSessions?: string;
     minRating?: string;
     maxRating?: string;
+    minNps?: string;
     ttl?: string;
   }) => {
     try {
@@ -246,6 +248,20 @@ export default function Network() {
         filteredOffers = filteredOffers.filter((offer: Offer) => matchingWallets.has(offer.wallet.toLowerCase()));
       }
       
+      if (filters?.minNps) {
+        const minNps = parseFloat(filters.minNps);
+        if (!isNaN(minNps)) {
+          filteredProfiles = filteredProfiles.filter((profile: any) => {
+            const npsScore = profile.npsScore || 0;
+            return npsScore >= minNps;
+          });
+          // Filter asks/offers to only show those from matching profiles
+          const matchingWallets = new Set(filteredProfiles.map((p: any) => p.wallet.toLowerCase()));
+          filteredAsks = filteredAsks.filter((ask: Ask) => matchingWallets.has(ask.wallet.toLowerCase()));
+          filteredOffers = filteredOffers.filter((offer: Offer) => matchingWallets.has(offer.wallet.toLowerCase()));
+        }
+      }
+      
       setAsks(filteredAsks);
       setOffers(filteredOffers);
       setProfiles(filteredProfiles);
@@ -339,6 +355,7 @@ export default function Network() {
       minSessions: minSessionsFilter || undefined,
       minRating: minRatingFilter || undefined,
       maxRating: maxRatingFilter || undefined,
+      minNps: minNpsFilter || undefined,
       ttl: ttlFilter || undefined,
     });
   };
@@ -1146,6 +1163,30 @@ export default function Network() {
                 onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
               />
             </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min NPS Score (0-10)</span>
+              <input
+                type="number"
+                value={minNpsFilter}
+                onChange={(e) => setMinNpsFilter(e.target.value)}
+                placeholder="e.g. 7"
+                min="0"
+                max="10"
+                step="1"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
           </div>
           
           {/* Submit Button */}
@@ -1189,6 +1230,7 @@ export default function Network() {
                 setMinSessionsFilter('');
                 setMinRatingFilter('');
                 setMaxRatingFilter('');
+                setMinNpsFilter('');
                 setTtlFilter('');
                 setTypeFilter('all');
                 fetchNetwork();
