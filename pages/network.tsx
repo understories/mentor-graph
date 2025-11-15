@@ -80,10 +80,17 @@ export default function Network() {
   const router = useRouter();
   const [asks, setAsks] = useState<Ask[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [skillFilter, setSkillFilter] = useState('');
   const [currentFilterSkill, setCurrentFilterSkill] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'asks' | 'offers'>('all');
+  const [seniorityFilter, setSeniorityFilter] = useState<string>('');
+  const [mentorRoleFilter, setMentorRoleFilter] = useState<string>('');
+  const [learnerRoleFilter, setLearnerRoleFilter] = useState<string>('');
+  const [minReputationFilter, setMinReputationFilter] = useState<string>('');
+  const [minSessionsFilter, setMinSessionsFilter] = useState<string>('');
+  const [ttlFilter, setTtlFilter] = useState<string>(''); // 'active' | 'expiring' | 'all'
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [userWallet, setUserWallet] = useState<string>('');
   const [showAnalytics, setShowAnalytics] = useState(true);
@@ -107,9 +114,21 @@ export default function Network() {
       .catch(err => console.error('Error fetching user profile:', err));
   }, []);
 
-  const fetchNetwork = async (skill?: string) => {
+  const fetchNetwork = async (filters?: {
+    skill?: string;
+    seniority?: string;
+    mentorRole?: string;
+    learnerRole?: string;
+    minReputation?: string;
+    minSessions?: string;
+    ttl?: string;
+  }) => {
     try {
-      const url = skill ? `/api/network?skill=${encodeURIComponent(skill)}` : '/api/network';
+      const params = new URLSearchParams();
+      if (filters?.skill) params.append('skill', filters.skill);
+      if (filters?.seniority) params.append('seniority', filters.seniority);
+      
+      const url = params.toString() ? `/api/network?${params.toString()}` : '/api/network';
       const res = await fetch(url);
       if (!res.ok) {
         const errorData = await res.json();
@@ -117,9 +136,85 @@ export default function Network() {
         return;
       }
       const data = await res.json();
-      setAsks(data.asks || []);
-      setOffers(data.offers || []);
-      setCurrentFilterSkill(skill || '');
+      
+      // Apply client-side filters
+      let filteredAsks = data.asks || [];
+      let filteredOffers = data.offers || [];
+      let filteredProfiles = data.profiles || [];
+      
+      // TTL filter for asks/offers
+      if (filters?.ttl === 'active') {
+        const now = Date.now();
+        filteredAsks = filteredAsks.filter((ask: Ask) => {
+          const created = new Date(ask.createdAt).getTime();
+          const expires = created + (ask.ttlSeconds * 1000);
+          return expires > now;
+        });
+        filteredOffers = filteredOffers.filter((offer: Offer) => {
+          const created = new Date(offer.createdAt).getTime();
+          const expires = created + (offer.ttlSeconds * 1000);
+          return expires > now;
+        });
+      } else if (filters?.ttl === 'expiring') {
+        const now = Date.now();
+        const oneHour = 60 * 60 * 1000;
+        filteredAsks = filteredAsks.filter((ask: Ask) => {
+          const created = new Date(ask.createdAt).getTime();
+          const expires = created + (ask.ttlSeconds * 1000);
+          const remaining = expires - now;
+          return remaining > 0 && remaining < oneHour;
+        });
+        filteredOffers = filteredOffers.filter((offer: Offer) => {
+          const created = new Date(offer.createdAt).getTime();
+          const expires = created + (offer.ttlSeconds * 1000);
+          const remaining = expires - now;
+          return remaining > 0 && remaining < oneHour;
+        });
+      }
+      
+      // Profile filters (client-side)
+      if (filters?.mentorRole) {
+        filteredProfiles = filteredProfiles.filter((profile: any) => {
+          const mentorRoles = profile.mentorRoles || [];
+          return mentorRoles.some((role: string) => 
+            role.toLowerCase().includes(filters.mentorRole!.toLowerCase())
+          );
+        });
+      }
+      
+      if (filters?.learnerRole) {
+        filteredProfiles = filteredProfiles.filter((profile: any) => {
+          const learnerRoles = profile.learnerRoles || [];
+          return learnerRoles.some((role: string) => 
+            role.toLowerCase().includes(filters.learnerRole!.toLowerCase())
+          );
+        });
+      }
+      
+      if (filters?.minReputation) {
+        const minRep = parseFloat(filters.minReputation);
+        if (!isNaN(minRep)) {
+          filteredProfiles = filteredProfiles.filter((profile: any) => {
+            const repScore = profile.reputationScore || 0;
+            return repScore >= minRep;
+          });
+        }
+      }
+      
+      if (filters?.minSessions) {
+        const minSess = parseInt(filters.minSessions, 10);
+        if (!isNaN(minSess)) {
+          filteredProfiles = filteredProfiles.filter((profile: any) => {
+            const sessions = profile.sessionsCompleted || 0;
+            return sessions >= minSess;
+          });
+        }
+      }
+      
+      setAsks(filteredAsks);
+      setOffers(filteredOffers);
+      setProfiles(filteredProfiles);
+      setCurrentFilterSkill(filters?.skill || '');
     } catch (err) {
       console.error('Error fetching /api/network:', err);
     } finally {
@@ -199,7 +294,15 @@ export default function Network() {
 
   const handleApplyFilter = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchNetwork(skillFilter || undefined);
+    fetchNetwork({
+      skill: skillFilter || undefined,
+      seniority: seniorityFilter || undefined,
+      mentorRole: mentorRoleFilter || undefined,
+      learnerRole: learnerRoleFilter || undefined,
+      minReputation: minReputationFilter || undefined,
+      minSessions: minSessionsFilter || undefined,
+      ttl: ttlFilter || undefined,
+    });
   };
 
   // Compute relevance score for a node
@@ -667,78 +770,266 @@ export default function Network() {
         boxShadow: theme.shadow,
         transition: 'all 0.3s ease'
       }}>
-        <form onSubmit={handleApplyFilter} style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>Skill:</span>
-            <input
-              type="text"
-              value={skillFilter}
-              onChange={(e) => setSkillFilter(e.target.value)}
-              placeholder="e.g. solidity"
+        <h3 style={{ 
+          marginTop: 0, 
+          marginBottom: '16px', 
+          fontSize: '16px', 
+          fontWeight: '600', 
+          color: theme.text 
+        }}>
+          Filters
+        </h3>
+        <form onSubmit={handleApplyFilter}>
+          {/* Row 1: Basic Filters */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Skill</span>
+              <input
+                type="text"
+                value={skillFilter}
+                onChange={(e) => setSkillFilter(e.target.value)}
+                placeholder="e.g. solidity"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Seniority</span>
+              <select
+                value={seniorityFilter}
+                onChange={(e) => setSeniorityFilter(e.target.value)}
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  fontSize: '14px',
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              >
+                <option value="">All</option>
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+                <option value="expert">Expert</option>
+              </select>
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Type</span>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as 'all' | 'asks' | 'offers')}
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  fontSize: '14px',
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              >
+                <option value="all">All</option>
+                <option value="asks">Asks</option>
+                <option value="offers">Offers</option>
+              </select>
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Availability (TTL)</span>
+              <select
+                value={ttlFilter}
+                onChange={(e) => setTtlFilter(e.target.value)}
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  fontSize: '14px',
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="expiring">Expiring Soon (&lt;1h)</option>
+              </select>
+            </label>
+          </div>
+          
+          {/* Row 2: Role & Reputation Filters */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Mentor Role</span>
+              <input
+                type="text"
+                value={mentorRoleFilter}
+                onChange={(e) => setMentorRoleFilter(e.target.value)}
+                placeholder="e.g. technical mentor"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Learner Role</span>
+              <input
+                type="text"
+                value={learnerRoleFilter}
+                onChange={(e) => setLearnerRoleFilter(e.target.value)}
+                placeholder="e.g. product manager"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Reputation Score</span>
+              <input
+                type="number"
+                value={minReputationFilter}
+                onChange={(e) => setMinReputationFilter(e.target.value)}
+                placeholder="e.g. 50"
+                min="0"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
+            
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Sessions</span>
+              <input
+                type="number"
+                value={minSessionsFilter}
+                onChange={(e) => setMinSessionsFilter(e.target.value)}
+                placeholder="e.g. 5"
+                min="0"
+                style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: `1px solid ${theme.inputBorder}`,
+                  backgroundColor: theme.inputBg,
+                  color: theme.text,
+                  fontSize: '14px',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              />
+            </label>
+          </div>
+          
+          {/* Submit Button */}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              type="submit" 
               style={{ 
-                padding: '8px 12px', 
+                padding: '10px 24px', 
+                backgroundColor: '#0066cc', 
+                color: 'white', 
+                border: 'none', 
                 borderRadius: '6px', 
-                border: `1px solid ${theme.inputBorder}`,
-                backgroundColor: theme.inputBg,
-                color: theme.text,
-                fontSize: '14px',
-                width: '180px',
-                transition: 'all 0.2s',
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-              onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
-            />
-          </label>
-          <button 
-            type="submit" 
-            style={{ 
-              padding: '8px 20px', 
-              backgroundColor: '#0066cc', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500',
-              boxShadow: '0 1px 3px rgba(0, 102, 204, 0.3)',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#0052a3';
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 102, 204, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#0066cc';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 102, 204, 0.3)';
-            }}
-          >
-            Apply
-          </button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>Type:</span>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as 'all' | 'asks' | 'offers')}
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: '6px', 
-                border: `1px solid ${theme.inputBorder}`,
-                fontSize: '14px',
-                backgroundColor: theme.inputBg,
-                color: theme.text,
                 cursor: 'pointer',
-                transition: 'border-color 0.2s',
+                fontSize: '14px',
+                fontWeight: '500',
+                boxShadow: '0 1px 3px rgba(0, 102, 204, 0.3)',
+                transition: 'all 0.2s ease',
               }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-              onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#0052a3';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 102, 204, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#0066cc';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 102, 204, 0.3)';
+              }}
             >
-              <option value="all">All</option>
-              <option value="asks">Asks</option>
-              <option value="offers">Offers</option>
-            </select>
-          </label>
+              Apply Filters
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                setSkillFilter('');
+                setSeniorityFilter('');
+                setMentorRoleFilter('');
+                setLearnerRoleFilter('');
+                setMinReputationFilter('');
+                setMinSessionsFilter('');
+                setTtlFilter('');
+                setTypeFilter('all');
+                fetchNetwork();
+              }}
+              style={{ 
+                padding: '10px 24px', 
+                backgroundColor: theme.hoverBg, 
+                color: theme.text, 
+                border: `1px solid ${theme.border}`, 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = darkMode ? '#4a4a4a' : '#e0e0e0';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+            >
+              Clear All
+            </button>
+          </div>
         </form>
       </section>
 

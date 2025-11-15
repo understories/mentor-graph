@@ -158,13 +158,25 @@ export async function createUserProfile({
   return { key: entityKey, txHash };
 }
 
-export async function listUserProfiles(skill?: string): Promise<UserProfile[]> {
+export async function listUserProfiles(params?: { 
+  skill?: string; 
+  seniority?: string;
+  spaceId?: string;
+}): Promise<UserProfile[]> {
   const publicClient = getPublicClient();
   const query = publicClient.buildQuery();
   let queryBuilder = query.where(eq('type', 'user_profile'));
   
-  if (skill) {
-    queryBuilder = queryBuilder.where(eq('skills', skill));
+  if (params?.skill) {
+    queryBuilder = queryBuilder.where(eq('skills', params.skill));
+  }
+  
+  if (params?.seniority) {
+    queryBuilder = queryBuilder.where(eq('seniority', params.seniority));
+  }
+  
+  if (params?.spaceId) {
+    queryBuilder = queryBuilder.where(eq('spaceId', params.spaceId));
   }
   
   const result = await queryBuilder
