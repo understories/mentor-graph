@@ -62,6 +62,7 @@ export default function Network() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [skillFilter, setSkillFilter] = useState('');
+  const [currentFilterSkill, setCurrentFilterSkill] = useState<string>('');
   const [, setNow] = useState(Date.now());
 
   const fetchNetwork = async (skill?: string) => {
@@ -76,6 +77,7 @@ export default function Network() {
       const data = await res.json();
       setAsks(data.asks || []);
       setOffers(data.offers || []);
+      setCurrentFilterSkill(skill || '');
     } catch (err) {
       console.error('Error fetching /api/network:', err);
     } finally {
@@ -93,6 +95,53 @@ export default function Network() {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    console.log('[Network] Setting up SSE connection...');
+    const source = new EventSource('/api/subscribe');
+
+    source.onopen = () => {
+      console.log('[Network] SSE connection opened');
+    };
+
+    source.onmessage = (event) => {
+      console.log('[Network] SSE message received:', event.data);
+      const { type, entity } = JSON.parse(event.data);
+
+      if (type === 'ask') {
+        setAsks((prev) => {
+          if (currentFilterSkill) {
+            const skillLower = currentFilterSkill.toLowerCase();
+            const entitySkill = (entity.skill || '').toLowerCase();
+            if (!entitySkill.includes(skillLower)) {
+              return prev;
+            }
+          }
+          return [entity, ...prev];
+        });
+      }
+
+      if (type === 'offer') {
+        setOffers((prev) => {
+          if (currentFilterSkill) {
+            const skillLower = currentFilterSkill.toLowerCase();
+            const entitySkill = (entity.skill || '').toLowerCase();
+            if (!entitySkill.includes(skillLower)) {
+              return prev;
+            }
+          }
+          return [entity, ...prev];
+        });
+      }
+    };
+
+    source.onerror = (err) => {
+      console.error('[Network] SSE error:', err);
+      console.error('[Network] SSE readyState:', source.readyState);
+    };
+
+    return () => source.close();
+  }, [currentFilterSkill]);
 
   const handleApplyFilter = (e: React.FormEvent) => {
     e.preventDefault();
