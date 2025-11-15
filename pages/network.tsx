@@ -34,6 +34,7 @@ type WebNode = {
   message: string;
   createdAt: string;
   ttlSeconds: number;
+  spaceId: string;
   txHash?: string;
   x: number;
   y: number;
@@ -98,6 +99,8 @@ export default function Network() {
   const [userWallet, setUserWallet] = useState<string>('');
   const [showAnalytics, setShowAnalytics] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'matches' | 'skills' | 'wallets' | 'all'>('all');
+  const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const [, setNow] = useState(Date.now());
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
@@ -374,6 +377,7 @@ export default function Network() {
         message: a.message,
         createdAt: a.createdAt,
         ttlSeconds: a.ttlSeconds,
+        spaceId: a.spaceId,
         txHash: a.txHash,
         x: 0,
         y: 0,
@@ -387,6 +391,7 @@ export default function Network() {
         message: o.message,
         createdAt: o.createdAt,
         ttlSeconds: o.ttlSeconds,
+        spaceId: o.spaceId,
         txHash: o.txHash,
         x: 0,
         y: 0,
@@ -532,6 +537,46 @@ export default function Network() {
     }
   }, [draggingNode, dragOffset]);
 
+  // Compute match score between an ask and offer (from spec)
+  const computeMatchScore = (ask: WebNode, offer: WebNode): number => {
+    // Must be ask + offer, different wallets, same spaceId
+    if (ask.type === offer.type || ask.wallet === offer.wallet) return 0;
+    if (ask.spaceId !== offer.spaceId) return 0;
+
+    let score = 0;
+
+    // 1. Skill fit (up to 0.5)
+    const askSkill = ask.skill.toLowerCase();
+    const offerSkill = offer.skill.toLowerCase();
+    if (askSkill === offerSkill) {
+      score += 0.5;
+    } else if (askSkill.includes(offerSkill) || offerSkill.includes(askSkill)) {
+      score += 0.3; // Fuzzy match
+    }
+
+    // 2. Time fit (up to 0.3) - TTL overlap
+    const now = Date.now();
+    const askCreated = new Date(ask.createdAt).getTime();
+    const offerCreated = new Date(offer.createdAt).getTime();
+    const askExpires = askCreated + (ask.ttlSeconds * 1000);
+    const offerExpires = offerCreated + (offer.ttlSeconds * 1000);
+    const askMinutesLeft = Math.max(0, (askExpires - now) / (1000 * 60));
+    const offerMinutesLeft = Math.max(0, (offerExpires - now) / (1000 * 60));
+    const overlap = Math.min(askMinutesLeft, offerMinutesLeft);
+    // Map overlap to 0-0.3 (up to 60 minutes = 0.3)
+    score += Math.min(0.3, (overlap / 60) * 0.3);
+
+    // 3. Recency (up to 0.2) - posted around same time
+    const ageDiffMinutes = Math.abs(askCreated - offerCreated) / (1000 * 60);
+    if (ageDiffMinutes < 30) {
+      score += 0.2;
+    } else if (ageDiffMinutes < 120) {
+      score += 0.1;
+    }
+
+    return Math.min(1, score);
+  };
+
   // Compute Arkiv-based connections
   const computeConnections = () => {
     const connections: Array<{
@@ -540,12 +585,13 @@ export default function Network() {
       type: 'skill' | 'wallet' | 'match';
       fromPos: { x: number; y: number };
       toPos: { x: number; y: number };
+      score?: number; // Match score for match edges
     }> = [];
 
     displayedNodes.forEach((node) => {
       const nodePos = getNodePosition(node.id, node.x, node.y);
       
-      // Skill-based connections (same skill) - always show
+      // Skill-based connections (same skill)
       displayedNodes.forEach((target) => {
         if (target.id === node.id) return;
         if (node.skill.toLowerCase() === target.skill.toLowerCase()) {
@@ -560,10 +606,10 @@ export default function Network() {
         }
       });
 
-      // Wallet-based connections (same wallet - entities from same contributor) - always show
+      // Wallet-based connections (same wallet - entities from same contributor)
       displayedNodes.forEach((target) => {
         if (target.id === node.id) return;
-        if (node.wallet === target.wallet && node.wallet !== userWallet) {
+        if (node.wallet === target.wallet) {
           const targetPos = getNodePosition(target.id, target.x, target.y);
           connections.push({
             from: node.id,
@@ -575,20 +621,22 @@ export default function Network() {
         }
       });
 
-      // Match connections (ask + offer with same skill - potential mentorship matches) - always show
+      // Match connections (ask + offer with match scoring)
       if (node.type === 'ask') {
         displayedNodes.forEach((target) => {
-          if (target.type === 'offer' && 
-              node.skill.toLowerCase() === target.skill.toLowerCase() &&
-              node.wallet !== target.wallet) {
-            const targetPos = getNodePosition(target.id, target.x, target.y);
-            connections.push({
-              from: node.id,
-              to: target.id,
-              type: 'match',
-              fromPos: nodePos,
-              toPos: targetPos,
-            });
+          if (target.type === 'offer' && node.wallet !== target.wallet) {
+            const matchScore = computeMatchScore(node, target);
+            if (matchScore > 0.2) { // Only show matches with score > 0.2
+              const targetPos = getNodePosition(target.id, target.x, target.y);
+              connections.push({
+                from: node.id,
+                to: target.id,
+                type: 'match',
+                fromPos: nodePos,
+                toPos: targetPos,
+                score: matchScore,
+              });
+            }
           }
         });
       }
@@ -604,7 +652,32 @@ export default function Network() {
     });
   };
 
-  const connections = computeConnections();
+  const allConnections = computeConnections();
+  
+  // Filter connections by view mode
+  const connections = allConnections.filter(conn => {
+    if (viewMode === 'all') return true;
+    if (viewMode === 'matches') return conn.type === 'match';
+    if (viewMode === 'skills') return conn.type === 'skill';
+    if (viewMode === 'wallets') return conn.type === 'wallet';
+    return true;
+  });
+  
+  // Filter connections by focus mode
+  const filteredConnections = focusedNode 
+    ? connections.filter(conn => conn.from === focusedNode || conn.to === focusedNode)
+    : connections;
+  
+  // Determine node opacity based on focus
+  const getNodeOpacity = (nodeId: string): number => {
+    if (!focusedNode) return 1;
+    if (nodeId === focusedNode) return 1;
+    const isNeighbor = filteredConnections.some(conn => 
+      (conn.from === focusedNode && conn.to === nodeId) || 
+      (conn.to === focusedNode && conn.from === nodeId)
+    );
+    return isNeighbor ? 0.7 : 0.3;
+  };
 
   // Compute summary stats
   const totalAsks = asks.length;
@@ -1161,25 +1234,65 @@ export default function Network() {
             <div style={{ 
               marginBottom: '16px',
               paddingBottom: '16px',
-              borderBottom: `1px solid ${theme.borderLight}`
+              borderBottom: `1px solid ${theme.borderLight}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '20px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Network Web
-              </h2>
-              <p style={{ 
-                margin: '4px 0 0 0',
-                fontSize: '13px',
-                color: theme.textSecondary,
-                transition: 'color 0.3s ease'
-              }}>
-                Drag nodes to explore • Blue: same skill • Purple: same wallet • Green dashed: potential matches
-              </p>
+              <div>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '20px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Network Web
+                </h2>
+                <p style={{ 
+                  margin: '4px 0 0 0',
+                  fontSize: '13px',
+                  color: theme.textSecondary,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Drag nodes to explore • Click to focus • Blue: same skill • Purple: same wallet • Green: matches
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {(['all', 'matches', 'skills', 'wallets'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      setViewMode(mode);
+                      if (mode !== 'all') setFocusedNode(null);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      borderRadius: '6px',
+                      border: `1px solid ${viewMode === mode ? '#0066cc' : theme.border}`,
+                      backgroundColor: viewMode === mode ? '#0066cc' : theme.hoverBg,
+                      color: viewMode === mode ? 'white' : theme.text,
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (viewMode !== mode) {
+                        e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (viewMode !== mode) {
+                        e.currentTarget.style.backgroundColor = theme.hoverBg;
+                      }
+                    }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
             </div>
             <svg 
               width="100%" 
@@ -1193,24 +1306,32 @@ export default function Network() {
               }}
             >
               {/* Draw Arkiv-based connections */}
-              {connections.map((conn, idx) => {
+              {filteredConnections.map((conn, idx) => {
                 let strokeColor = 'rgba(0, 102, 204, 0.15)';
                 let strokeWidth = 1.5;
                 let strokeDasharray = 'none';
+                let opacity = 1;
                 
                 if (conn.type === 'match') {
-                  // Potential mentorship matches (ask + offer)
-                  strokeColor = 'rgba(76, 175, 80, 0.4)';
-                  strokeWidth = 2.5;
-                  strokeDasharray = '5,5';
+                  // Potential mentorship matches (ask + offer) - use score for opacity/thickness
+                  const score = conn.score || 0;
+                  opacity = Math.max(0.2, score); // Opacity based on score
+                  strokeWidth = 1 + (score * 2); // Thickness based on score (1-3px)
+                  strokeColor = `rgba(76, 175, 80, ${opacity})`;
+                  strokeDasharray = score > 0.7 ? 'none' : '5,5'; // Solid for high scores, dashed for low
                 } else if (conn.type === 'wallet') {
-                  // Same wallet (same contributor)
+                  // Same wallet (same contributor) - purple
                   strokeColor = 'rgba(156, 39, 176, 0.25)';
                   strokeWidth = 2;
                 } else {
-                  // Same skill
+                  // Same skill - blue
                   strokeColor = 'rgba(0, 102, 204, 0.2)';
                   strokeWidth = 1.5;
+                }
+                
+                // Dim edges not connected to focused node
+                if (focusedNode && conn.from !== focusedNode && conn.to !== focusedNode) {
+                  opacity = 0.1;
                 }
                 
                 return (
@@ -1223,6 +1344,7 @@ export default function Network() {
                     stroke={strokeColor}
                     strokeWidth={strokeWidth}
                     strokeDasharray={strokeDasharray}
+                    opacity={opacity}
                   />
                 );
               })}
@@ -1238,12 +1360,20 @@ export default function Network() {
                 marginTop: '16px',
                 cursor: draggingNode ? 'grabbing' : 'default'
               }}
+              onMouseDown={(e) => {
+                // Only clear focus if clicking directly on container (not on a node)
+                if (e.target === e.currentTarget) {
+                  setFocusedNode(null);
+                }
+              }}
               onMouseMove={handleDrag}
               onMouseUp={handleDragEnd}
             >
               {displayedNodes.slice(0, 50).map((node) => {
                 const nodePos = getNodePosition(node.id, node.x, node.y);
                 const isDragging = draggingNode === node.id;
+                const nodeOpacity = getNodeOpacity(node.id);
+                const isFocused = focusedNode === node.id;
                 
                 return (
                   <div
@@ -1255,22 +1385,33 @@ export default function Network() {
                       transform: 'translate(-50%, -50%)',
                       width: '160px',
                       padding: '12px',
-                    backgroundColor: darkMode 
-                      ? (node.type === 'ask' ? '#3a2525' : '#253a25')
-                      : (node.type === 'ask' ? '#fff5f5' : '#f0f9f4'),
-                    border: `2px solid ${node.type === 'ask' ? '#ef5350' : '#4caf50'}`,
-                    borderRadius: '10px',
-                    cursor: isDragging ? 'grabbing' : 'grab',
-                    boxShadow: isDragging 
-                        ? (darkMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.25)')
-                        : (darkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.12)'),
+                      backgroundColor: darkMode 
+                        ? (node.type === 'ask' ? '#3a2525' : '#253a25')
+                        : (node.type === 'ask' ? '#fff5f5' : '#f0f9f4'),
+                      border: `2px solid ${isFocused ? '#0066cc' : (node.type === 'ask' ? '#ef5350' : '#4caf50')}`,
+                      borderRadius: '10px',
+                      cursor: isDragging ? 'grabbing' : 'grab',
+                      boxShadow: isFocused 
+                        ? (darkMode ? '0 0 20px rgba(0, 102, 204, 0.6)' : '0 0 20px rgba(0, 102, 204, 0.4)')
+                        : isDragging 
+                          ? (darkMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.25)')
+                          : (darkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.12)'),
                       fontSize: '12px',
-                      transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
-                      zIndex: isDragging ? 100 : 1,
+                      transition: isDragging ? 'none' : 'all 0.2s ease',
+                      zIndex: isFocused ? 50 : (isDragging ? 100 : 1),
                       userSelect: 'none',
+                      opacity: nodeOpacity,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFocusedNode(focusedNode === node.id ? null : node.id);
                     }}
                     onMouseDown={(e) => {
-                      handleDragStart(e, node.id, nodePos.x, nodePos.y);
+                      // Only start drag on right mouse button or if not clicking
+                      if (e.button === 0) {
+                        // Left click - allow both drag and focus
+                        handleDragStart(e, node.id, nodePos.x, nodePos.y);
+                      }
                     }}
                     onMouseEnter={(e) => {
                       if (!isDragging) {
@@ -1432,7 +1573,173 @@ export default function Network() {
               </div>
             </div>
 
-            {/* Skill Counts */}
+            {/* Skill Supply vs Demand */}
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ 
+                fontSize: '16px', 
+                marginBottom: '16px',
+                fontWeight: '600',
+                color: theme.text,
+                transition: 'color 0.3s ease'
+              }}>
+                Skill Supply vs Demand
+              </h3>
+              <div style={{ maxHeight: '400px', overflowY: 'auto', fontSize: '13px' }}>
+                {Object.entries(skillCounts)
+                  .sort((a, b) => {
+                    // Sort by bottleneck severity (demand - supply), then by total activity
+                    const aCounts = a[1];
+                    const bCounts = b[1];
+                    const aImbalance = aCounts.asks - aCounts.offers;
+                    const bImbalance = bCounts.asks - bCounts.offers;
+                    if (Math.abs(aImbalance) !== Math.abs(bImbalance)) {
+                      return Math.abs(bImbalance) - Math.abs(aImbalance);
+                    }
+                    const aTotal = aCounts.asks + aCounts.offers;
+                    const bTotal = bCounts.asks + bCounts.offers;
+                    return bTotal - aTotal;
+                  })
+                  .map(([skill, counts]) => {
+                    const total = counts.asks + counts.offers;
+                    const demandRatio = total > 0 ? counts.asks / total : 0;
+                    const supplyRatio = total > 0 ? counts.offers / total : 0;
+                    const imbalance = counts.asks - counts.offers;
+                    const isBottleneck = imbalance > 0;
+                    const isSurplus = imbalance < 0;
+                    
+                    return (
+                      <div 
+                        key={skill} 
+                        style={{ 
+                          marginBottom: '12px', 
+                          padding: '14px', 
+                          backgroundColor: theme.hoverBg, 
+                          borderRadius: '8px',
+                          border: `1px solid ${isBottleneck ? '#ef5350' : isSurplus ? '#4caf50' : theme.borderLight}`,
+                          borderLeft: `4px solid ${isBottleneck ? '#ef5350' : isSurplus ? '#4caf50' : theme.border}`,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e9ecef';
+                          e.currentTarget.style.borderColor = theme.border;
+                          e.currentTarget.style.boxShadow = theme.shadow;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = theme.hoverBg;
+                          e.currentTarget.style.borderColor = isBottleneck ? '#ef5350' : isSurplus ? '#4caf50' : theme.borderLight;
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ fontWeight: '600', color: theme.text, fontSize: '14px' }}>
+                            {skill}
+                          </div>
+                          {isBottleneck && (
+                            <span style={{ 
+                              fontSize: '11px', 
+                              fontWeight: '600',
+                              color: '#ef5350',
+                              backgroundColor: darkMode ? '#4a2525' : '#ffebee',
+                              padding: '2px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              ⚠️ Bottleneck
+                            </span>
+                          )}
+                          {isSurplus && (
+                            <span style={{ 
+                              fontSize: '11px', 
+                              fontWeight: '600',
+                              color: '#4caf50',
+                              backgroundColor: darkMode ? '#1a3a1a' : '#e8f5e9',
+                              padding: '2px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              ✓ Surplus
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Visual bars */}
+                        <div style={{ marginBottom: '8px' }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            gap: '4px',
+                            marginBottom: '4px',
+                            fontSize: '11px',
+                            color: theme.textSecondary
+                          }}>
+                            <span style={{ flex: 1 }}>Demand (Asks)</span>
+                            <span style={{ flex: 1, textAlign: 'right' }}>Supply (Offers)</span>
+                          </div>
+                          <div style={{ 
+                            display: 'flex', 
+                            height: '20px',
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            border: `1px solid ${theme.borderLight}`
+                          }}>
+                            <div style={{ 
+                              flex: demandRatio || 0.01,
+                              backgroundColor: '#ef5350',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              minWidth: counts.asks > 0 ? '20px' : '0'
+                            }}>
+                              {counts.asks > 0 && counts.asks}
+                            </div>
+                            <div style={{ 
+                              flex: supplyRatio || 0.01,
+                              backgroundColor: '#4caf50',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              minWidth: counts.offers > 0 ? '20px' : '0'
+                            }}>
+                              {counts.offers > 0 && counts.offers}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Summary */}
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          fontSize: '12px',
+                          color: theme.textSecondary
+                        }}>
+                          <span>
+                            {counts.asks} ask{counts.asks !== 1 ? 's' : ''}
+                          </span>
+                          <span>
+                            {counts.offers} offer{counts.offers !== 1 ? 's' : ''}
+                          </span>
+                          <span style={{ 
+                            fontWeight: '600',
+                            color: isBottleneck ? '#ef5350' : isSurplus ? '#4caf50' : theme.textSecondary
+                          }}>
+                            {Math.abs(imbalance)} {isBottleneck ? 'more needed' : isSurplus ? 'available' : 'balanced'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+            
+            {/* Top Skills (simplified) */}
             <div style={{ marginBottom: '20px' }}>
               <h3 style={{ 
                 fontSize: '16px', 
