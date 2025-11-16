@@ -143,6 +143,8 @@ export default function Network() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [clickedNodeId, setClickedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/me')
@@ -548,26 +550,50 @@ export default function Network() {
     setPanStart(null);
   };
 
-  // Handle drag start
+  // Handle drag start - only set up for potential drag, don't start dragging yet
   const handleDragStart = (e: React.MouseEvent, nodeId: string, currentX: number, currentY: number) => {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent panning when dragging nodes
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const containerRect = (e.currentTarget.closest('[data-container]') as HTMLElement)?.getBoundingClientRect();
-    if (!containerRect) return;
-    
-    const offsetX = e.clientX - containerRect.left - currentX;
-    const offsetY = e.clientY - containerRect.top - currentY;
-    
-    setDraggingNode(nodeId);
-    setDragOffset({ x: offsetX, y: offsetY });
+    e.stopPropagation(); // Prevent panning when clicking on nodes
+    // Store the initial mouse position and node ID to detect if it's a drag or click
+    setDragStartPos({ x: e.clientX, y: e.clientY });
+    setClickedNodeId(nodeId);
   };
 
-  // Handle drag
+  // Handle drag - check if mouse moved enough to start dragging
   const handleDrag = (e: React.MouseEvent) => {
     if (panning && panStart) {
       handlePanMove(e);
       return;
+    }
+    
+    // If we have a drag start position but haven't started dragging yet, check if we should start
+    if (dragStartPos && clickedNodeId && !draggingNode) {
+      const dx = e.clientX - dragStartPos.x;
+      const dy = e.clientY - dragStartPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Only start dragging if mouse moved more than 5 pixels
+      if (distance > 5) {
+        const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
+        if (container && clickedNodeId) {
+          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+          if (clickedNode) {
+            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+            const containerRect = container.getBoundingClientRect();
+            
+            // Calculate the offset from mouse to node center at drag start
+            const mouseX = dragStartPos.x - containerRect.left;
+            const mouseY = dragStartPos.y - containerRect.top;
+            const nodeCenterX = nodePos.x * zoom + panOffset.x;
+            const nodeCenterY = nodePos.y * zoom + panOffset.y;
+            
+            setDragOffset({ 
+              x: mouseX - nodeCenterX, 
+              y: mouseY - nodeCenterY 
+            });
+            setDraggingNode(clickedNodeId);
+          }
+        }
+      }
     }
     
     if (!draggingNode || !dragOffset) return;
@@ -576,11 +602,12 @@ export default function Network() {
     if (!container) return;
     
     const containerRect = container.getBoundingClientRect();
-    // Account for pan offset
-    const newX = (e.clientX - containerRect.left - dragOffset.x - panOffset.x) / zoom;
-    const newY = (e.clientY - containerRect.top - dragOffset.y - panOffset.y) / zoom;
+    // Calculate new position: mouse position minus offset, then account for pan/zoom
+    const mouseX = e.clientX - containerRect.left;
+    const mouseY = e.clientY - containerRect.top;
+    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
     
-    // Allow nodes to be anywhere (no constraints with pan/zoom)
     setNodePositions(prev => ({
       ...prev,
       [draggingNode]: { x: newX, y: newY }
@@ -592,8 +619,14 @@ export default function Network() {
     if (panning) {
       handlePanEnd();
     } else {
-      setDraggingNode(null);
-      setDragOffset(null);
+      // If we were dragging, end the drag
+      if (draggingNode) {
+        setDraggingNode(null);
+        setDragOffset(null);
+      }
+      // Always clear drag start position and clicked node
+      setDragStartPos(null);
+      setClickedNodeId(null);
     }
   };
 
@@ -607,7 +640,7 @@ export default function Network() {
 
   // Add global mouse event listeners for dragging and panning
   useEffect(() => {
-    if (draggingNode || panning) {
+    if (draggingNode || panning || (dragStartPos && clickedNodeId)) {
       const handleMouseMove = (e: MouseEvent) => {
         if (panning && panStart) {
           setPanOffset({
@@ -617,13 +650,45 @@ export default function Network() {
           return;
         }
         
+        // Check if we should start dragging (mouse moved enough)
+        if (dragStartPos && clickedNodeId && !draggingNode) {
+          const dx = e.clientX - dragStartPos.x;
+          const dy = e.clientY - dragStartPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 5) {
+            const container = document.querySelector('[data-container]') as HTMLElement;
+            if (container && clickedNodeId) {
+              const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+              if (clickedNode) {
+                const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+                const containerRect = container.getBoundingClientRect();
+                
+                // Calculate the offset from mouse to node center at drag start
+                const mouseX = dragStartPos.x - containerRect.left;
+                const mouseY = dragStartPos.y - containerRect.top;
+                const nodeCenterX = nodePos.x * zoom + panOffset.x;
+                const nodeCenterY = nodePos.y * zoom + panOffset.y;
+                
+                setDragOffset({ 
+                  x: mouseX - nodeCenterX, 
+                  y: mouseY - nodeCenterY 
+                });
+                setDraggingNode(clickedNodeId);
+              }
+            }
+          }
+        }
+        
         if (draggingNode && dragOffset) {
           const container = document.querySelector('[data-container]') as HTMLElement;
           if (!container) return;
           
           const containerRect = container.getBoundingClientRect();
-          const newX = (e.clientX - containerRect.left - dragOffset.x - panOffset.x) / zoom;
-          const newY = (e.clientY - containerRect.top - dragOffset.y - panOffset.y) / zoom;
+          const mouseX = e.clientX - containerRect.left;
+          const mouseY = e.clientY - containerRect.top;
+          const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+          const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
           
           setNodePositions(prev => ({
             ...prev,
@@ -644,7 +709,7 @@ export default function Network() {
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggingNode, dragOffset, panning, panStart, panOffset, zoom]);
+  }, [draggingNode, dragOffset, dragStartPos, clickedNodeId, panning, panStart, panOffset, zoom, displayedNodes]);
 
   // Compute match score between an ask and offer (from spec)
   const computeMatchScore = (ask: WebNode, offer: WebNode): number => {
@@ -1390,20 +1455,20 @@ export default function Network() {
         {/* Web Visualization */}
         <div style={{ flex: 1, position: 'relative' }}>
           <div style={{ 
-            border: `1px solid ${theme.border}`, 
+            border: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)'}`, 
             borderRadius: '12px', 
-            backgroundColor: theme.cardBg,
+            backgroundColor: darkMode ? '#0a0a0a' : '#1a1a1a',
             padding: '24px',
             minHeight: '640px',
             position: 'relative',
             overflow: 'hidden',
-            boxShadow: theme.shadow,
+            boxShadow: darkMode ? '0 0 30px rgba(76, 175, 80, 0.2), inset 0 0 60px rgba(76, 175, 80, 0.05)' : '0 0 20px rgba(76, 175, 80, 0.15)',
             transition: 'all 0.3s ease'
           }}>
             <div style={{ 
               marginBottom: '16px',
               paddingBottom: '16px',
-              borderBottom: `1px solid ${theme.borderLight}`,
+              borderBottom: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.15)'}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -1474,6 +1539,15 @@ export default function Network() {
                 zIndex: 0
               }}
             >
+              <defs>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
               {/* Draw Arkiv-based connections */}
               {filteredConnections.map((conn, idx) => {
                 let strokeColor = 'rgba(0, 102, 204, 0.15)';
@@ -1484,18 +1558,20 @@ export default function Network() {
                 if (conn.type === 'match') {
                   // Potential mentorship matches (ask + offer) - use score for opacity/thickness
                   const score = conn.score || 0;
-                  opacity = Math.max(0.2, score); // Opacity based on score
-                  strokeWidth = 1 + (score * 2); // Thickness based on score (1-3px)
-                  strokeColor = `rgba(76, 175, 80, ${opacity})`;
+                  opacity = Math.max(0.3, score); // Opacity based on score
+                  strokeWidth = 1.5 + (score * 2); // Thickness based on score (1.5-3.5px)
+                  strokeColor = `rgba(76, 175, 80, ${Math.min(0.8, opacity + 0.2)})`;
                   strokeDasharray = score > 0.7 ? 'none' : '5,5'; // Solid for high scores, dashed for low
                 } else if (conn.type === 'wallet') {
-                  // Same wallet (same contributor) - purple
-                  strokeColor = 'rgba(156, 39, 176, 0.25)';
-                  strokeWidth = 2;
-                } else {
-                  // Same skill - blue
-                  strokeColor = 'rgba(0, 102, 204, 0.2)';
+                  // Same wallet (same contributor) - green
+                  strokeColor = 'rgba(76, 175, 80, 0.3)';
                   strokeWidth = 1.5;
+                  strokeDasharray = '3,3';
+                } else {
+                  // Same skill - green
+                  strokeColor = 'rgba(76, 175, 80, 0.4)';
+                  strokeWidth = 1.5;
+                  strokeDasharray = '5,5';
                 }
                 
                 // Dim edges not connected to focused node
@@ -1520,6 +1596,7 @@ export default function Network() {
                     strokeWidth={strokeWidth}
                     strokeDasharray={strokeDasharray}
                     opacity={opacity}
+                    filter={conn.type === 'match' ? 'url(#glow)' : 'none'}
                   />
                 );
               })}
@@ -1643,33 +1720,47 @@ export default function Network() {
                       left: `${transformedX}px`,
                       top: `${transformedY}px`,
                       transform: `translate(-50%, -50%) scale(${zoom})`,
-                      width: '160px',
-                      padding: '12px',
-                      backgroundColor: darkMode 
-                        ? (node.type === 'ask' ? '#3a2525' : '#253a25')
-                        : (node.type === 'ask' ? '#fff5f5' : '#f0f9f4'),
-                      border: `2px solid ${isFocused ? '#0066cc' : (node.type === 'ask' ? '#ef5350' : '#4caf50')}`,
-                      borderRadius: '10px',
+                      width: '120px',
+                      height: '120px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: node.type === 'ask' 
+                        ? 'radial-gradient(circle, rgba(239, 83, 80, 0.3) 0%, rgba(186, 28, 28, 0.2) 100%)'
+                        : 'radial-gradient(circle, rgba(76, 175, 80, 0.4) 0%, rgba(46, 125, 50, 0.3) 100%)',
+                      border: `3px solid ${isFocused ? 'rgba(76, 175, 80, 1)' : (node.type === 'ask' ? 'rgba(239, 83, 80, 0.6)' : 'rgba(76, 175, 80, 0.8)')}`,
+                      borderRadius: '50%',
                       cursor: isDragging ? 'grabbing' : 'grab',
                       boxShadow: isFocused 
-                        ? (darkMode ? '0 0 20px rgba(0, 102, 204, 0.6)' : '0 0 20px rgba(0, 102, 204, 0.4)')
+                        ? '0 0 30px rgba(76, 175, 80, 0.8), 0 0 60px rgba(76, 175, 80, 0.4), inset 0 0 20px rgba(76, 175, 80, 0.2)'
                         : isDragging 
-                          ? (darkMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.25)')
-                          : (darkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.12)'),
+                          ? '0 0 25px rgba(76, 175, 80, 0.6), 0 0 50px rgba(76, 175, 80, 0.3)'
+                          : '0 0 15px rgba(76, 175, 80, 0.5), 0 0 30px rgba(76, 175, 80, 0.2), inset 0 0 15px rgba(76, 175, 80, 0.1)',
                       fontSize: '12px',
-                      transition: isDragging ? 'none' : 'all 0.2s ease',
+                      transition: isDragging ? 'none' : 'all 0.3s ease',
                       zIndex: isFocused ? 50 : (isDragging ? 100 : 1),
                       userSelect: 'none',
                       opacity: nodeOpacity,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFocusedNode(focusedNode === node.id ? null : node.id);
+                      // Only focus if we didn't drag (dragStartPos will be null if it was just a click)
+                      if (!draggingNode && dragStartPos) {
+                        // Check if mouse moved - if not, it's a click
+                        const dx = e.clientX - (dragStartPos?.x || 0);
+                        const dy = e.clientY - (dragStartPos?.y || 0);
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance < 5) {
+                          setFocusedNode(focusedNode === node.id ? null : node.id);
+                        }
+                      } else if (!draggingNode) {
+                        setFocusedNode(focusedNode === node.id ? null : node.id);
+                      }
                     }}
                     onMouseDown={(e) => {
-                      // Only start drag on right mouse button or if not clicking
                       if (e.button === 0) {
-                        // Left click - allow both drag and focus
+                        // Left click - prepare for potential drag
                         handleDragStart(e, node.id, nodePos.x, nodePos.y);
                       }
                     }}
@@ -1693,34 +1784,38 @@ export default function Network() {
                     }}
                   >
                   <div style={{ 
+                    fontSize: '20px',
+                    marginBottom: '4px',
+                    filter: 'drop-shadow(0 0 4px rgba(76, 175, 80, 0.8))'
+                  }}>
+                    🌱
+                  </div>
+                  <div style={{ 
                     fontWeight: '600', 
-                    marginBottom: '6px', 
-                    color: node.type === 'ask' ? '#d32f2f' : '#2e7d32',
-                    fontSize: '13px'
-                  }}>
-                    {node.type === 'ask' ? '🔴 Ask' : '🟢 Offer'}
-                  </div>
-                  <div style={{ 
                     marginBottom: '4px', 
-                    fontWeight: '500',
-                    color: theme.text,
-                    fontSize: '13px'
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                    textShadow: '0 0 8px rgba(76, 175, 80, 0.8)'
                   }}>
-                    {node.skill || 'Unknown'}
+                    {node.skill || (node.type === 'ask' ? 'Ask' : 'Offer')}
                   </div>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    color: theme.textSecondary, 
-                    marginBottom: '4px'
+                  <div style={{
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    fontSize: '10px',
+                    marginTop: '2px',
+                    textAlign: 'center',
+                    fontFamily: 'monospace'
                   }}>
                     {shortenWallet(node.wallet)}
                   </div>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    color: theme.textTertiary, 
-                    marginTop: '6px',
-                    paddingTop: '6px',
-                    borderTop: `1px solid ${theme.borderLight}`
+                  <div style={{
+                    color: 'rgba(76, 175, 80, 0.9)',
+                    fontSize: '10px',
+                    marginTop: '4px',
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    textShadow: '0 0 4px rgba(76, 175, 80, 0.6)'
                   }}>
                     {formatTimeRemaining(node.createdAt, node.ttlSeconds)}
                   </div>
