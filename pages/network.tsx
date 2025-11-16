@@ -1019,7 +1019,7 @@ export default function Network() {
             transition: 'color 0.3s ease',
             fontStyle: 'italic',
           }}>
-            Knowledge and network are lights in the dark forest guiding the way 🌱
+            Arkiv-powered mentorship network visualization • Let knowledge and network light our way in the dark forest 🌱
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

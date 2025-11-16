@@ -484,12 +484,21 @@ export default function Me() {
     const message = formData.get('message') as string;
     const expiresInValue = formData.get('expiresIn') as string;
     const expiresInUnit = formData.get('expiresInUnit') as string;
+    console.log('[Frontend] handleCreateAsk - Raw form values:', { expiresInValue, expiresInUnit, type: typeof expiresInValue });
 
     let expiresIn: number | undefined;
-    if (expiresInValue) {
+    if (expiresInValue && expiresInValue.trim() !== '') {
       const value = parseFloat(expiresInValue);
-      const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
-      expiresIn = Math.floor(value * multiplier);
+      console.log('[Frontend] handleCreateAsk - Parsed value:', value, 'isNaN:', isNaN(value));
+      if (!isNaN(value) && value > 0) {
+        const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
+        expiresIn = Math.floor(value * multiplier);
+        console.log('[Frontend] handleCreateAsk - Calculated expiresIn:', expiresIn, 'seconds (', value, expiresInUnit, ')');
+      } else {
+        console.log('[Frontend] handleCreateAsk - Value validation failed:', { value, isNaN: isNaN(value), isPositive: value > 0 });
+      }
+    } else {
+      console.log('[Frontend] handleCreateAsk - No expiresInValue provided or empty');
     }
 
     if (!connectedWallet) {
@@ -503,9 +512,9 @@ export default function Me() {
       wallet: connectedWallet,
       skill,
       message,
-      expiresIn: expiresIn || undefined,
+      expiresIn: expiresIn !== undefined ? expiresIn : undefined,
     };
-    console.log('Creating ask:', payload);
+    console.log('[Frontend] handleCreateAsk - Final payload:', JSON.stringify(payload, null, 2));
 
     try {
       const res = await fetch('/api/me', {
@@ -544,12 +553,21 @@ export default function Me() {
     const availabilityWindow = formData.get('availabilityWindow') as string;
     const expiresInValue = formData.get('expiresIn') as string;
     const expiresInUnit = formData.get('expiresInUnit') as string;
+    console.log('[Frontend] handleCreateOffer - Raw form values:', { expiresInValue, expiresInUnit, type: typeof expiresInValue });
 
     let expiresIn: number | undefined;
-    if (expiresInValue) {
+    if (expiresInValue && expiresInValue.trim() !== '') {
       const value = parseFloat(expiresInValue);
-      const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
-      expiresIn = Math.floor(value * multiplier);
+      console.log('[Frontend] handleCreateOffer - Parsed value:', value, 'isNaN:', isNaN(value));
+      if (!isNaN(value) && value > 0) {
+        const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
+        expiresIn = Math.floor(value * multiplier);
+        console.log('[Frontend] handleCreateOffer - Calculated expiresIn:', expiresIn, 'seconds (', value, expiresInUnit, ')');
+      } else {
+        console.log('[Frontend] handleCreateOffer - Value validation failed:', { value, isNaN: isNaN(value), isPositive: value > 0 });
+      }
+    } else {
+      console.log('[Frontend] handleCreateOffer - No expiresInValue provided or empty');
     }
 
     if (!connectedWallet) {
@@ -564,9 +582,9 @@ export default function Me() {
       skill,
       message,
       availabilityWindow,
-      expiresIn: expiresIn || undefined,
+      expiresIn: expiresIn !== undefined ? expiresIn : undefined,
     };
-    console.log('Creating offer:', payload);
+    console.log('[Frontend] Creating offer - expiresInValue:', expiresInValue, 'expiresInUnit:', expiresInUnit, 'calculated expiresIn:', expiresIn, 'payload:', payload);
 
     try {
       const res = await fetch('/api/me', {

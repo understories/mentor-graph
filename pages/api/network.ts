@@ -13,15 +13,28 @@ export default async function handler(req: any, res: any) {
     const spaceId = req.query.spaceId as string | undefined;
     const seniority = req.query.seniority as string | undefined;
 
-    const askOfferParams = skill || spaceId ? { skill, spaceId } : undefined;
-    const profileParams = skill || seniority || spaceId ? { skill, seniority, spaceId } : undefined;
-    const sessionParams = skill || spaceId ? { skill, spaceId } : undefined;
+    // Build params objects, only including defined values
+    const askOfferParams: { skill?: string; spaceId?: string } = {};
+    if (skill) askOfferParams.skill = skill;
+    if (spaceId) askOfferParams.spaceId = spaceId;
+    const hasAskOfferParams = Object.keys(askOfferParams).length > 0;
+
+    const profileParams: { skill?: string; seniority?: string; spaceId?: string } = {};
+    if (skill) profileParams.skill = skill;
+    if (seniority) profileParams.seniority = seniority;
+    if (spaceId) profileParams.spaceId = spaceId;
+    const hasProfileParams = Object.keys(profileParams).length > 0;
+
+    const sessionParams: { skill?: string; spaceId?: string } = {};
+    if (skill) sessionParams.skill = skill;
+    if (spaceId) sessionParams.spaceId = spaceId;
+    const hasSessionParams = Object.keys(sessionParams).length > 0;
 
     const [asks, offers, profiles, sessions] = await Promise.all([
-      listAsks(askOfferParams),
-      listOffers(askOfferParams),
-      listUserProfiles(profileParams),
-      listSessions(sessionParams),
+      listAsks(hasAskOfferParams ? askOfferParams : undefined),
+      listOffers(hasAskOfferParams ? askOfferParams : undefined),
+      listUserProfiles(hasProfileParams ? profileParams : undefined),
+      listSessions(hasSessionParams ? sessionParams : undefined),
     ]);
 
     // Apply client-side filters that can't be done via Arkiv queries

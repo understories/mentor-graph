@@ -31,12 +31,14 @@ export async function createOffer({
   privateKey: `0x${string}`;
   expiresIn?: number;
 }): Promise<{ key: string; txHash: string }> {
+  console.log('[Arkiv] createOffer - Received expiresIn:', expiresIn, 'type:', typeof expiresIn, 'OFFER_TTL_SECONDS:', OFFER_TTL_SECONDS);
   const walletClient = getWalletClientFromPrivateKey(privateKey);
   const enc = new TextEncoder();
   const spaceId = 'local-dev';
   const status = 'active';
   const createdAt = new Date().toISOString();
   const ttl = expiresIn || OFFER_TTL_SECONDS;
+  console.log('[Arkiv] createOffer - Final TTL:', ttl, 'seconds (', ttl / 3600, 'hours)');
 
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: enc.encode(JSON.stringify({
