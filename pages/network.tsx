@@ -1972,6 +1972,325 @@ export default function Network() {
         )}
       </div>
 
+      {/* Profile Matches Section */}
+      {profiles.length > 0 && (
+        <section style={{ 
+          marginBottom: '32px', 
+          padding: '28px', 
+          border: `1px solid ${theme.border}`, 
+          borderRadius: '12px',
+          backgroundColor: theme.cardBg,
+          boxShadow: theme.shadow,
+          transition: 'all 0.3s ease'
+        }}>
+          <div style={{ 
+            marginBottom: '24px',
+            paddingBottom: '16px',
+            borderBottom: `2px solid ${theme.borderLight}`
+          }}>
+            <h2 style={{ 
+              margin: 0,
+              fontSize: '22px',
+              fontWeight: '600',
+              color: theme.text,
+              transition: 'color 0.3s ease'
+            }}>
+              Profile Matches ({profiles.length})
+            </h2>
+            <p style={{ 
+              margin: '8px 0 0 0',
+              fontSize: '14px',
+              color: theme.textSecondary,
+              transition: 'color 0.3s ease'
+            }}>
+              Profiles matching your filters • Skills, reputation, and availability
+            </p>
+          </div>
+          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+            {profiles.map((profile) => {
+              // Compute match score based on skill overlap with user
+              const profileSkills = profile.skillsArray || (profile.skills ? profile.skills.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean) : []);
+              const skillOverlap = userSkills.length > 0 
+                ? profileSkills.filter((ps: string) => userSkills.some((us: string) => ps.includes(us) || us.includes(ps))).length
+                : 0;
+              const matchScore = userSkills.length > 0 
+                ? Math.min(100, (skillOverlap / Math.max(userSkills.length, profileSkills.length)) * 100)
+                : 0;
+              
+              return (
+                <div 
+                  key={profile.key} 
+                  style={{ 
+                    padding: '20px', 
+                    border: `1px solid ${theme.borderLight}`, 
+                    borderRadius: '8px', 
+                    backgroundColor: theme.hoverBg,
+                    transition: 'all 0.2s ease',
+                    borderLeft: `4px solid ${matchScore > 50 ? '#4caf50' : matchScore > 25 ? '#ffa500' : theme.border}`
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = theme.shadowHover;
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.borderColor = theme.border;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = theme.borderLight;
+                  }}
+                >
+                  <div style={{ 
+                    marginBottom: '12px', 
+                    paddingBottom: '12px', 
+                    borderBottom: `1px solid ${theme.borderLight}`
+                  }}>
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '8px'
+                    }}>
+                      <strong style={{ 
+                        color: theme.text,
+                        fontSize: '16px',
+                        fontWeight: '600'
+                      }}>
+                        👤 {profile.displayName || 'Unknown'}
+                      </strong>
+                      {matchScore > 0 && (
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          color: matchScore > 50 ? '#4caf50' : matchScore > 25 ? '#ffa500' : theme.textSecondary,
+                          backgroundColor: matchScore > 50 ? (darkMode ? '#1a3a1a' : '#e8f5e9') : matchScore > 25 ? (darkMode ? '#3a2a1a' : '#fff3e0') : theme.hoverBg,
+                          padding: '4px 8px',
+                          borderRadius: '4px'
+                        }}>
+                          {Math.round(matchScore)}% match
+                        </span>
+                      )}
+                    </div>
+                    {profile.username && (
+                      <div style={{ 
+                        fontSize: '13px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        @{profile.username}
+                      </div>
+                    )}
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: theme.textTertiary,
+                      fontFamily: 'monospace'
+                    }}>
+                      {shortenWallet(profile.wallet)}
+                    </div>
+                  </div>
+                  
+                  {profile.bioShort && (
+                    <div style={{ 
+                      marginBottom: '12px', 
+                      color: theme.text,
+                      fontSize: '14px',
+                      lineHeight: '1.5'
+                    }}>
+                      {profile.bioShort}
+                    </div>
+                  )}
+                  
+                  {profileSkills.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: theme.textSecondary,
+                        marginBottom: '6px',
+                        fontWeight: '500'
+                      }}>
+                        Skills:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {profileSkills.slice(0, 5).map((skill: string, idx: number) => {
+                          const isMatch = userSkills.some((us: string) => skill.toLowerCase().includes(us) || us.includes(skill.toLowerCase()));
+                          return (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: '11px',
+                                padding: '4px 8px',
+                                backgroundColor: isMatch ? (darkMode ? '#1a3a1a' : '#e8f5e9') : theme.cardBg,
+                                color: isMatch ? '#4caf50' : theme.text,
+                                borderRadius: '4px',
+                                border: `1px solid ${isMatch ? '#4caf50' : theme.borderLight}`,
+                                fontWeight: isMatch ? '600' : 'normal'
+                              }}
+                            >
+                              {skill}
+                            </span>
+                          );
+                        })}
+                        {profileSkills.length > 5 && (
+                          <span style={{
+                            fontSize: '11px',
+                            color: theme.textSecondary
+                          }}>
+                            +{profileSkills.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={{ 
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    marginBottom: '12px',
+                    fontSize: '12px',
+                    color: theme.textSecondary
+                  }}>
+                    {profile.seniority && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        {profile.seniority}
+                      </span>
+                    )}
+                    {profile.reputationScore !== undefined && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        Rep: {profile.reputationScore}
+                      </span>
+                    )}
+                    {profile.sessionsCompleted !== undefined && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        {profile.sessionsCompleted} sessions
+                      </span>
+                    )}
+                    {profile.avgRating !== undefined && profile.avgRating > 0 && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        ⭐ {profile.avgRating.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {profile.mentorRoles && profile.mentorRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        Mentor Roles:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {profile.mentorRoles.slice(0, 3).map((role: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 6px',
+                              backgroundColor: darkMode ? '#2a3a2a' : '#e8f5e9',
+                              color: '#4caf50',
+                              borderRadius: '3px'
+                            }}
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {profile.learnerRoles && profile.learnerRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        Learner Roles:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {profile.learnerRoles.slice(0, 3).map((role: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 6px',
+                              backgroundColor: darkMode ? '#2a2a3a' : '#e3f2fd',
+                              color: '#2196f3',
+                              borderRadius: '3px'
+                            }}
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {profile.txHash && (
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                      <a
+                        href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${profile.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ 
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '13px',
+                          color: '#0066cc',
+                          textDecoration: 'none',
+                          fontWeight: '500',
+                          padding: '6px 12px',
+                          backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                          borderRadius: '6px',
+                          border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(profile.txHash!);
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = darkMode ? '#2a5a7a' : '#d0e7ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#3a7a9a' : '#80c7ff';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = darkMode ? '#1a3a5a' : '#e7f3ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#2a5a7a' : '#b3d9ff';
+                        }}
+                        title="Click to open in explorer (copies hash to clipboard)">
+                        View on Arkiv Explorer ↗
+                      </a>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Detailed Lists Below */}
       <div style={{ marginTop: '32px' }}>
         {displayedAsks.length > 0 && (
