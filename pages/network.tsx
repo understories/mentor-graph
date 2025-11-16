@@ -106,6 +106,10 @@ export default function Network() {
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     fetch('/api/me')
@@ -479,9 +483,35 @@ export default function Network() {
     return { x: defaultX, y: defaultY };
   };
 
+  // Handle pan start (on container background)
+  const handlePanStart = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+      e.preventDefault();
+      setPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    }
+  };
+
+  // Handle pan move
+  const handlePanMove = (e: React.MouseEvent) => {
+    if (panning && panStart) {
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      });
+    }
+  };
+
+  // Handle pan end
+  const handlePanEnd = () => {
+    setPanning(false);
+    setPanStart(null);
+  };
+
   // Handle drag start
   const handleDragStart = (e: React.MouseEvent, nodeId: string, currentX: number, currentY: number) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent panning when dragging nodes
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const containerRect = (e.currentTarget.closest('[data-container]') as HTMLElement)?.getBoundingClientRect();
     if (!containerRect) return;
@@ -495,49 +525,71 @@ export default function Network() {
 
   // Handle drag
   const handleDrag = (e: React.MouseEvent) => {
+    if (panning && panStart) {
+      handlePanMove(e);
+      return;
+    }
+    
     if (!draggingNode || !dragOffset) return;
     
     const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
     if (!container) return;
     
     const containerRect = container.getBoundingClientRect();
-    const newX = e.clientX - containerRect.left - dragOffset.x;
-    const newY = e.clientY - containerRect.top - dragOffset.y;
+    // Account for pan offset
+    const newX = (e.clientX - containerRect.left - dragOffset.x - panOffset.x) / zoom;
+    const newY = (e.clientY - containerRect.top - dragOffset.y - panOffset.y) / zoom;
     
-    // Constrain to container bounds
-    const constrainedX = Math.max(80, Math.min(containerRect.width - 80, newX));
-    const constrainedY = Math.max(80, Math.min(600, newY));
-    
+    // Allow nodes to be anywhere (no constraints with pan/zoom)
     setNodePositions(prev => ({
       ...prev,
-      [draggingNode]: { x: constrainedX, y: constrainedY }
+      [draggingNode]: { x: newX, y: newY }
     }));
   };
 
   // Handle drag end
   const handleDragEnd = () => {
-    setDraggingNode(null);
-    setDragOffset(null);
+    if (panning) {
+      handlePanEnd();
+    } else {
+      setDraggingNode(null);
+      setDragOffset(null);
+    }
   };
 
-  // Add global mouse event listeners for dragging
+  // Handle zoom with mouse wheel
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.5, Math.min(2, zoom * delta));
+    setZoom(newZoom);
+  };
+
+  // Add global mouse event listeners for dragging and panning
   useEffect(() => {
-    if (draggingNode) {
+    if (draggingNode || panning) {
       const handleMouseMove = (e: MouseEvent) => {
-        const container = document.querySelector('[data-container]') as HTMLElement;
-        if (!container || !dragOffset) return;
+        if (panning && panStart) {
+          setPanOffset({
+            x: e.clientX - panStart.x,
+            y: e.clientY - panStart.y
+          });
+          return;
+        }
         
-        const containerRect = container.getBoundingClientRect();
-        const newX = e.clientX - containerRect.left - dragOffset.x;
-        const newY = e.clientY - containerRect.top - dragOffset.y;
-        
-        const constrainedX = Math.max(80, Math.min(containerRect.width - 80, newX));
-        const constrainedY = Math.max(80, Math.min(600, newY));
-        
-        setNodePositions(prev => ({
-          ...prev,
-          [draggingNode]: { x: constrainedX, y: constrainedY }
-        }));
+        if (draggingNode && dragOffset) {
+          const container = document.querySelector('[data-container]') as HTMLElement;
+          if (!container) return;
+          
+          const containerRect = container.getBoundingClientRect();
+          const newX = (e.clientX - containerRect.left - dragOffset.x - panOffset.x) / zoom;
+          const newY = (e.clientY - containerRect.top - dragOffset.y - panOffset.y) / zoom;
+          
+          setNodePositions(prev => ({
+            ...prev,
+            [draggingNode]: { x: newX, y: newY }
+          }));
+        }
       };
 
       const handleMouseUp = () => {
@@ -552,7 +604,7 @@ export default function Network() {
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggingNode, dragOffset]);
+  }, [draggingNode, dragOffset, panning, panStart, panOffset, zoom]);
 
   // Compute match score between an ask and offer (from spec)
   const computeMatchScore = (ask: WebNode, offer: WebNode): number => {
@@ -1298,7 +1350,7 @@ export default function Network() {
                   color: theme.textSecondary,
                   transition: 'color 0.3s ease'
                 }}>
-                  Drag nodes to explore • Click to focus • Blue: same skill • Purple: same wallet • Green: matches
+                  Drag background to pan • Scroll to zoom • Drag nodes to explore • Click to focus • Blue: same skill • Purple: same wallet • Green: matches
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1377,13 +1429,19 @@ export default function Network() {
                   opacity = 0.1;
                 }
                 
+                // Apply pan and zoom to connection coordinates
+                const fromX = conn.fromPos.x * zoom + panOffset.x;
+                const fromY = conn.fromPos.y * zoom + panOffset.y;
+                const toX = conn.toPos.x * zoom + panOffset.x;
+                const toY = conn.toPos.y * zoom + panOffset.y;
+                
                 return (
                   <line
                     key={`${conn.from}-${conn.to}-${idx}`}
-                    x1={conn.fromPos.x}
-                    y1={conn.fromPos.y}
-                    x2={conn.toPos.x}
-                    y2={conn.toPos.y}
+                    x1={fromX}
+                    y1={fromY}
+                    x2={toX}
+                    y2={toY}
                     stroke={strokeColor}
                     strokeWidth={strokeWidth}
                     strokeDasharray={strokeDasharray}
@@ -1393,6 +1451,80 @@ export default function Network() {
               })}
             </svg>
             
+            {/* Zoom Controls */}
+            <div style={{
+              position: 'absolute',
+              top: '90px',
+              right: '24px',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              backgroundColor: theme.cardBg,
+              padding: '8px',
+              borderRadius: '8px',
+              border: `1px solid ${theme.border}`,
+              boxShadow: theme.shadow
+            }}>
+              <button
+                onClick={() => setZoom(prev => Math.min(2, prev + 0.1))}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '14px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer'
+                }}
+                title="Zoom in"
+              >
+                +
+              </button>
+              <div style={{
+                padding: '4px 8px',
+                fontSize: '12px',
+                textAlign: 'center',
+                color: theme.textSecondary
+              }}>
+                {Math.round(zoom * 100)}%
+              </div>
+              <button
+                onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '14px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer'
+                }}
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                onClick={() => {
+                  setPanOffset({ x: 0, y: 0 });
+                  setZoom(1);
+                }}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  marginTop: '4px'
+                }}
+                title="Reset view"
+              >
+                Reset
+              </button>
+            </div>
+
             {/* Render nodes */}
             <div 
               data-container
@@ -1401,16 +1533,23 @@ export default function Network() {
                 width: '100%', 
                 height: '600px', 
                 marginTop: '16px',
-                cursor: draggingNode ? 'grabbing' : 'default'
+                cursor: panning ? 'grabbing' : (draggingNode ? 'grabbing' : 'grab'),
+                overflow: 'hidden'
               }}
               onMouseDown={(e) => {
-                // Only clear focus if clicking directly on container (not on a node)
-                if (e.target === e.currentTarget) {
-                  setFocusedNode(null);
+                // Start panning if clicking on container background
+                if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+                  handlePanStart(e);
+                } else {
+                  // Only clear focus if clicking directly on container (not on a node)
+                  if (e.target === e.currentTarget) {
+                    setFocusedNode(null);
+                  }
                 }
               }}
               onMouseMove={handleDrag}
               onMouseUp={handleDragEnd}
+              onWheel={handleWheel}
             >
               {displayedNodes.slice(0, 50).map((node) => {
                 const nodePos = getNodePosition(node.id, node.x, node.y);
@@ -1418,14 +1557,18 @@ export default function Network() {
                 const nodeOpacity = getNodeOpacity(node.id);
                 const isFocused = focusedNode === node.id;
                 
+                // Apply pan and zoom transforms
+                const transformedX = nodePos.x * zoom + panOffset.x;
+                const transformedY = nodePos.y * zoom + panOffset.y;
+                
                 return (
                   <div
                     key={node.id}
                     style={{
                       position: 'absolute',
-                      left: `${nodePos.x}px`,
-                      top: `${nodePos.y}px`,
-                      transform: 'translate(-50%, -50%)',
+                      left: `${transformedX}px`,
+                      top: `${transformedY}px`,
+                      transform: `translate(-50%, -50%) scale(${zoom})`,
                       width: '160px',
                       padding: '12px',
                       backgroundColor: darkMode 
