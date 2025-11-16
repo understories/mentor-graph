@@ -203,9 +203,19 @@ export default async function handler(req: any, res: any) {
         if (!mentorWallet || !learnerWallet || !skill || !sessionDate) {
           return res.status(400).json({ ok: false, error: 'mentorWallet, learnerWallet, skill, and sessionDate are required' });
         }
+        
+        // Normalize wallet addresses to lowercase for consistency
+        const normalizedMentorWallet = mentorWallet.toLowerCase();
+        const normalizedLearnerWallet = learnerWallet.toLowerCase();
+        
+        // Validate that mentor and learner are different wallets
+        if (normalizedMentorWallet === normalizedLearnerWallet) {
+          return res.status(400).json({ ok: false, error: 'Mentor and learner must be different wallets' });
+        }
+        
         const { key, txHash } = await createSession({
-          mentorWallet,
-          learnerWallet,
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
           skill,
           sessionDate,
           duration: duration ? parseInt(duration, 10) : undefined,
@@ -218,12 +228,18 @@ export default async function handler(req: any, res: any) {
         if (!sessionKey) {
           return res.status(400).json({ ok: false, error: 'sessionKey is required' });
         }
+        
+        // Normalize wallet addresses
+        const normalizedWallet = wallet.toLowerCase();
+        const normalizedMentorWallet = mentorWallet ? mentorWallet.toLowerCase() : undefined;
+        const normalizedLearnerWallet = learnerWallet ? learnerWallet.toLowerCase() : undefined;
+        
         const { key, txHash } = await confirmSession({
           sessionKey,
-          confirmedByWallet: wallet,
+          confirmedByWallet: normalizedWallet,
           privateKey: getPrivateKey(),
-          mentorWallet,
-          learnerWallet,
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
           spaceId,
         });
         res.json({ ok: true, key, txHash });
@@ -232,12 +248,18 @@ export default async function handler(req: any, res: any) {
         if (!sessionKey) {
           return res.status(400).json({ ok: false, error: 'sessionKey is required' });
         }
+        
+        // Normalize wallet addresses
+        const normalizedWallet = wallet.toLowerCase();
+        const normalizedMentorWallet = mentorWallet ? mentorWallet.toLowerCase() : undefined;
+        const normalizedLearnerWallet = learnerWallet ? learnerWallet.toLowerCase() : undefined;
+        
         const { key, txHash } = await rejectSession({
           sessionKey,
-          rejectedByWallet: wallet,
+          rejectedByWallet: normalizedWallet,
           privateKey: getPrivateKey(),
-          mentorWallet,
-          learnerWallet,
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
           spaceId,
         });
         res.json({ ok: true, key, txHash });

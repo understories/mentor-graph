@@ -10,6 +10,9 @@ export const CURRENT_WALLET = ARKIV_PRIVATE_KEY
 
 export const SPACE_ID = "local-dev"; // Optionally configurable later
 
+// Jitsi configuration
+export const JITSI_BASE_URL = process.env.JITSI_BASE_URL || 'https://meet.jit.si';
+
 // Helper to get private key, throwing if not available (for API routes that need it)
 export function getPrivateKey(): `0x${string}` {
   if (!ARKIV_PRIVATE_KEY) {

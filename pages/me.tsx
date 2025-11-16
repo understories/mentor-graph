@@ -76,11 +76,18 @@ type Session = {
   spaceId: string;
   createdAt: string;
   sessionDate: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   duration?: number;
   notes?: string;
   feedbackKey?: string;
   txHash?: string;
+  mentorConfirmed?: boolean;
+  learnerConfirmed?: boolean;
+  // Jitsi video meeting fields
+  videoProvider?: 'jitsi' | 'none' | 'custom';
+  videoRoomName?: string;
+  videoJoinUrl?: string;
+  videoJwtToken?: string;
 };
 
 type Feedback = {
@@ -2194,12 +2201,137 @@ export default function Me() {
           </div>
         </div>
 
+        {/* Upcoming Meetings */}
+        {(() => {
+          const now = Date.now();
+          const upcomingSessions = data.sessions.filter((session) => {
+            if (session.status === 'completed' || session.status === 'cancelled') return false;
+            if (!session.sessionDate) return false;
+            const sessionTime = new Date(session.sessionDate).getTime();
+            return sessionTime >= now;
+          }).sort((a, b) => {
+            // Sort by status (in-progress first, then pending, then scheduled), then by sessionDate (earliest first)
+            const statusOrder: Record<string, number> = { 'in-progress': 0, 'pending': 1, 'scheduled': 2 };
+            const aOrder = statusOrder[a.status] ?? 3;
+            const bOrder = statusOrder[b.status] ?? 3;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            const aTime = new Date(a.sessionDate).getTime();
+            const bTime = new Date(b.sessionDate).getTime();
+            return aTime - bTime;
+          });
+
+          if (upcomingSessions.length === 0) return null;
+
+          return (
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>📅 Upcoming Meetings</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {upcomingSessions.map((session) => {
+                  const sessionTime = new Date(session.sessionDate);
+                  const isScheduled = session.status === 'scheduled';
+                  const hasJitsi = isScheduled && session.videoProvider === 'jitsi' && session.videoJoinUrl;
+                  
+                  return (
+                    <div key={session.key} style={{
+                      padding: '16px',
+                      backgroundColor: theme.hoverBg,
+                      borderRadius: '8px',
+                      border: `1px solid ${theme.borderLight}`,
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = theme.shadowHover;
+                      e.currentTarget.style.borderColor = theme.border;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = theme.borderLight;
+                    }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '15px', color: theme.text, fontWeight: '600', marginBottom: '6px' }}>
+                            {session.skill} • {session.mentorWallet === data.wallet ? 'Mentor' : 'Learner'}
+                          </div>
+                          <div style={{ fontSize: '13px', color: theme.textSecondary, marginBottom: '4px' }}>
+                            {sessionTime.toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </div>
+                          <div style={{ fontSize: '12px', color: theme.textTertiary }}>
+                            {sessionTime.toLocaleTimeString('en-US', { 
+                              hour: 'numeric', 
+                              minute: '2-digit',
+                              hour12: true 
+                            })} • {session.duration || 60} min
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          backgroundColor: session.status === 'scheduled' ? (darkMode ? '#2d3a4a' : '#d1ecf1') :
+                                          session.status === 'in-progress' ? (darkMode ? '#4a3d2d' : '#fff3cd') :
+                                          (darkMode ? '#3a2a1a' : '#fff3e0'),
+                          color: session.status === 'scheduled' ? (darkMode ? '#90c7ee' : '#0c5460') :
+                                 session.status === 'in-progress' ? (darkMode ? '#ffd700' : '#856404') :
+                                 (darkMode ? '#ffa500' : '#ffa500'),
+                          fontWeight: '500',
+                          textTransform: 'capitalize'
+                        }}>
+                          {session.status === 'pending' ? '⏳ Pending' : session.status === 'scheduled' ? '✓ Scheduled' : session.status}
+                        </div>
+                      </div>
+                      {hasJitsi && (
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                          <a
+                            href={session.videoJoinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 16px',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              backgroundColor: '#4caf50',
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#45a049';
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#4caf50';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            🎥 Join Video Call
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Recent Sessions */}
-        {data.sessions.length > 0 && (
+        {data.sessions.filter(s => s.status === 'completed' || s.status === 'cancelled').length > 0 && (
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>Recent Sessions</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {data.sessions
+                .filter(s => s.status === 'completed' || s.status === 'cancelled')
                 .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime())
                 .slice(0, 5)
                 .map((session) => (
@@ -2225,12 +2357,8 @@ export default function Me() {
                       borderRadius: '4px',
                       fontSize: '12px',
                       backgroundColor: session.status === 'completed' ? (darkMode ? '#2d4a2d' : '#d4edda') : 
-                                      session.status === 'scheduled' ? (darkMode ? '#2d3a4a' : '#d1ecf1') :
-                                      session.status === 'in-progress' ? (darkMode ? '#4a3d2d' : '#fff3cd') :
                                       (darkMode ? '#4a2d2d' : '#f8d7da'),
                       color: session.status === 'completed' ? (darkMode ? '#90ee90' : '#155724') :
-                             session.status === 'scheduled' ? (darkMode ? '#90c7ee' : '#0c5460') :
-                             session.status === 'in-progress' ? (darkMode ? '#ffd700' : '#856404') :
                              (darkMode ? '#ff6b6b' : '#721c24'),
                       fontWeight: '500',
                       textTransform: 'capitalize'

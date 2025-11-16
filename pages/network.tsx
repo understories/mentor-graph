@@ -41,6 +41,11 @@ type Session = {
   txHash?: string;
   mentorConfirmed?: boolean;
   learnerConfirmed?: boolean;
+  // Jitsi video meeting fields
+  videoProvider?: 'jitsi' | 'none' | 'custom';
+  videoRoomName?: string;
+  videoJoinUrl?: string;
+  videoJwtToken?: string;
 };
 
 type WebNode = {
@@ -147,7 +152,14 @@ export default function Network() {
   const [clickedNodeId, setClickedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/me')
+    // Get connected wallet from localStorage (same as /me page)
+    const connectedWallet = localStorage.getItem('connectedWallet');
+    const walletToFetch = connectedWallet || undefined;
+    
+    // Build API URL with wallet query param if available
+    const apiUrl = walletToFetch ? `/api/me?wallet=${encodeURIComponent(walletToFetch)}` : '/api/me';
+    
+    fetch(apiUrl)
       .then(res => res.json())
       .then(data => {
         if (data.profile?.skills) {
@@ -2661,18 +2673,28 @@ export default function Network() {
                 let mentorWallet: string;
                 let learnerWallet: string;
                 
+                // Normalize wallet addresses for comparison
+                const targetWallet = requestMeetingModal.profile.wallet?.toLowerCase() || '';
+                const normalizedUserWallet = userWallet?.toLowerCase() || '';
+                
+                // Validate that user and target are different wallets
+                if (targetWallet === normalizedUserWallet) {
+                  alert('Cannot request a meeting with yourself. Please select a different profile.');
+                  return;
+                }
+                
                 if (targetHasMentorRoles && !userHasMentorRoles) {
                   // Target is mentor, user is learner
-                  mentorWallet = requestMeetingModal.profile.wallet;
-                  learnerWallet = userWallet;
+                  mentorWallet = targetWallet;
+                  learnerWallet = normalizedUserWallet;
                 } else if (userHasMentorRoles && !targetHasMentorRoles) {
                   // User is mentor, target is learner
-                  mentorWallet = userWallet;
-                  learnerWallet = requestMeetingModal.profile.wallet;
+                  mentorWallet = normalizedUserWallet;
+                  learnerWallet = targetWallet;
                 } else {
                   // Default: target is mentor (they're being requested)
-                  mentorWallet = requestMeetingModal.profile.wallet;
-                  learnerWallet = userWallet;
+                  mentorWallet = targetWallet;
+                  learnerWallet = normalizedUserWallet;
                 }
 
                 setSubmittingMeeting(true);
@@ -2906,8 +2928,8 @@ export default function Network() {
           const sessionTime = new Date(session.sessionDate).getTime();
           return sessionTime >= now;
         }).sort((a, b) => {
-          // Sort by status (pending first, then cancelled, then scheduled/in-progress), then by sessionDate (earliest first)
-          const statusOrder: Record<string, number> = { 'pending': 0, 'cancelled': 1, 'scheduled': 2, 'in-progress': 3 };
+          // Sort by status (in-progress first, then pending, then cancelled, then scheduled), then by sessionDate (earliest first)
+          const statusOrder: Record<string, number> = { 'in-progress': 0, 'pending': 1, 'cancelled': 2, 'scheduled': 3 };
           const aOrder = statusOrder[a.status] ?? 4;
           const bOrder = statusOrder[b.status] ?? 4;
           if (aOrder !== bOrder) return aOrder - bOrder;
@@ -3338,6 +3360,43 @@ export default function Network() {
                         >
                           ✗ Reject
                         </button>
+                      </div>
+                    )}
+
+                    {/* Jitsi Join Button - Show when session is scheduled and has Jitsi link */}
+                    {session.status === 'scheduled' && session.videoProvider === 'jitsi' && session.videoJoinUrl && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                        <a
+                          href={session.videoJoinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '12px 20px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            backgroundColor: '#4caf50',
+                            color: '#ffffff',
+                            textDecoration: 'none',
+                            borderRadius: '8px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 4px rgba(76, 175, 80, 0.3)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#45a049';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(76, 175, 80, 0.4)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#4caf50';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(76, 175, 80, 0.3)';
+                          }}
+                        >
+                          🎥 Join Video Call
+                        </a>
                       </div>
                     )}
 
