@@ -33,7 +33,8 @@ export async function createAsk({
   const spaceId = 'local-dev';
   const status = 'open';
   const createdAt = new Date().toISOString();
-  const ttl = expiresIn || ASK_TTL_SECONDS;
+  // Use expiresIn if provided and valid, otherwise use default
+  const ttl = (expiresIn !== undefined && expiresIn !== null && typeof expiresIn === 'number' && expiresIn > 0) ? expiresIn : ASK_TTL_SECONDS;
 
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: enc.encode(JSON.stringify({

@@ -1,7 +1,7 @@
 import { getProfileByWallet, createUserProfile, updateUserProfile } from "../../src/arkiv/profiles"
 import { listAsksForWallet, createAsk } from "../../src/arkiv/asks"
 import { listOffersForWallet, createOffer } from "../../src/arkiv/offers"
-import { listSessionsForWallet } from "../../src/arkiv/sessions"
+import { listSessionsForWallet, createSession, confirmSession, rejectSession } from "../../src/arkiv/sessions"
 import { listFeedbackForWallet } from "../../src/arkiv/feedback"
 import { CURRENT_WALLET, getPrivateKey } from "../../src/config"
 
@@ -176,12 +176,20 @@ export default async function handler(req: any, res: any) {
         if (!skill || !message) {
           return res.status(400).json({ ok: false, error: 'skill and message are required' });
         }
-            const { key, txHash } = await createAsk({
-              wallet,
+        // Parse expiresIn: if provided, use it; otherwise undefined (will use default in createAsk)
+        let parsedExpiresIn: number | undefined = undefined;
+        if (expiresIn !== undefined && expiresIn !== null && expiresIn !== '') {
+          const num = typeof expiresIn === 'number' ? expiresIn : Number(expiresIn);
+          if (!isNaN(num) && num > 0 && isFinite(num)) {
+            parsedExpiresIn = Math.floor(num);
+          }
+        }
+        const { key, txHash } = await createAsk({
+          wallet,
           skill,
           message,
           privateKey: getPrivateKey(),
-          expiresIn: expiresIn ? parseInt(expiresIn, 10) : undefined,
+          expiresIn: parsedExpiresIn,
         });
         res.json({ ok: true, key, txHash });
       } else if (action === 'createOffer') {
@@ -189,13 +197,86 @@ export default async function handler(req: any, res: any) {
         if (!skill || !message || !availabilityWindow) {
           return res.status(400).json({ ok: false, error: 'skill, message, and availabilityWindow are required' });
         }
-            const { key, txHash } = await createOffer({
-              wallet,
+        // Parse expiresIn: if provided, use it; otherwise undefined (will use default in createOffer)
+        let parsedExpiresIn: number | undefined = undefined;
+        if (expiresIn !== undefined && expiresIn !== null && expiresIn !== '') {
+          const num = typeof expiresIn === 'number' ? expiresIn : Number(expiresIn);
+          if (!isNaN(num) && num > 0 && isFinite(num)) {
+            parsedExpiresIn = Math.floor(num);
+          }
+        }
+        const { key, txHash } = await createOffer({
+          wallet,
           skill,
           message,
           availabilityWindow,
           privateKey: getPrivateKey(),
-          expiresIn: expiresIn ? parseInt(expiresIn, 10) : undefined,
+          expiresIn: parsedExpiresIn,
+        });
+        res.json({ ok: true, key, txHash });
+      } else if (action === 'createSession') {
+        const { mentorWallet, learnerWallet, skill, sessionDate, duration, notes } = req.body;
+        if (!mentorWallet || !learnerWallet || !skill || !sessionDate) {
+          return res.status(400).json({ ok: false, error: 'mentorWallet, learnerWallet, skill, and sessionDate are required' });
+        }
+        
+        // Normalize wallet addresses to lowercase for consistency
+        const normalizedMentorWallet = mentorWallet.toLowerCase();
+        const normalizedLearnerWallet = learnerWallet.toLowerCase();
+        
+        // Validate that mentor and learner are different wallets
+        if (normalizedMentorWallet === normalizedLearnerWallet) {
+          return res.status(400).json({ ok: false, error: 'Mentor and learner must be different wallets' });
+        }
+        
+        const { key, txHash } = await createSession({
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
+          skill,
+          sessionDate,
+          duration: duration ? parseInt(duration, 10) : undefined,
+          notes: notes || undefined,
+          privateKey: getPrivateKey(),
+        });
+        res.json({ ok: true, key, txHash });
+      } else if (action === 'confirmSession') {
+        const { sessionKey, mentorWallet, learnerWallet, spaceId } = req.body;
+        if (!sessionKey) {
+          return res.status(400).json({ ok: false, error: 'sessionKey is required' });
+        }
+        
+        // Normalize wallet addresses
+        const normalizedWallet = wallet.toLowerCase();
+        const normalizedMentorWallet = mentorWallet ? mentorWallet.toLowerCase() : undefined;
+        const normalizedLearnerWallet = learnerWallet ? learnerWallet.toLowerCase() : undefined;
+        
+        const { key, txHash } = await confirmSession({
+          sessionKey,
+          confirmedByWallet: normalizedWallet,
+          privateKey: getPrivateKey(),
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
+          spaceId,
+        });
+        res.json({ ok: true, key, txHash });
+      } else if (action === 'rejectSession') {
+        const { sessionKey, mentorWallet, learnerWallet, spaceId } = req.body;
+        if (!sessionKey) {
+          return res.status(400).json({ ok: false, error: 'sessionKey is required' });
+        }
+        
+        // Normalize wallet addresses
+        const normalizedWallet = wallet.toLowerCase();
+        const normalizedMentorWallet = mentorWallet ? mentorWallet.toLowerCase() : undefined;
+        const normalizedLearnerWallet = learnerWallet ? learnerWallet.toLowerCase() : undefined;
+        
+        const { key, txHash } = await rejectSession({
+          sessionKey,
+          rejectedByWallet: normalizedWallet,
+          privateKey: getPrivateKey(),
+          mentorWallet: normalizedMentorWallet,
+          learnerWallet: normalizedLearnerWallet,
+          spaceId,
         });
         res.json({ ok: true, key, txHash });
       } else {

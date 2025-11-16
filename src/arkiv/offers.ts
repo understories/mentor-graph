@@ -36,7 +36,8 @@ export async function createOffer({
   const spaceId = 'local-dev';
   const status = 'active';
   const createdAt = new Date().toISOString();
-  const ttl = expiresIn || OFFER_TTL_SECONDS;
+  // Use expiresIn if provided and valid, otherwise use default
+  const ttl = (expiresIn !== undefined && expiresIn !== null && typeof expiresIn === 'number' && expiresIn > 0) ? expiresIn : OFFER_TTL_SECONDS;
 
   const { entityKey, txHash } = await walletClient.createEntity({
     payload: enc.encode(JSON.stringify({

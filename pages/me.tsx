@@ -76,11 +76,18 @@ type Session = {
   spaceId: string;
   createdAt: string;
   sessionDate: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
   duration?: number;
   notes?: string;
   feedbackKey?: string;
   txHash?: string;
+  mentorConfirmed?: boolean;
+  learnerConfirmed?: boolean;
+  // Jitsi video meeting fields
+  videoProvider?: 'jitsi' | 'none' | 'custom';
+  videoRoomName?: string;
+  videoJoinUrl?: string;
+  videoJwtToken?: string;
 };
 
 type Feedback = {
@@ -148,21 +155,39 @@ function shortenWallet(wallet: string): string {
 function ArkivHelperText({ darkMode }: { darkMode: boolean }) {
   return (
     <div style={{
-      marginTop: '6px',
-      fontSize: '12px',
-      color: darkMode ? '#b0b0b0' : '#6c757d',
+      marginTop: '8px',
+      fontSize: '13px',
+      color: darkMode ? '#90c695' : '#2d7a32',
+      fontStyle: 'italic',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '8px',
+      lineHeight: '1.6',
+    }}>
+      <span style={{ fontSize: '18px', marginTop: '2px', flexShrink: 0 }}>🌱</span>
+      <span><strong>Caution:</strong> Your data is immutable and owned by you. This means it grows in the <a 
+        href="https://explorer.mendoza.hoodi.arkiv.network" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        style={{ color: '#0066cc', textDecoration: 'underline', fontWeight: '500' }}
+      >Arkiv garden</a> and cannot be deleted. Each edit plants a new seed and only displays a change on the front-end. Your previous growth remains forever in this infinite garden of knowledge. 🌺</span>
+    </div>
+  );
+}
+
+function ImmutableCaution({ darkMode }: { darkMode: boolean }) {
+  return (
+    <div style={{
+      marginTop: '4px',
+      fontSize: '11px',
+      color: darkMode ? '#90c695' : '#2d7a32',
       fontStyle: 'italic',
       display: 'flex',
       alignItems: 'center',
       gap: '4px',
     }}>
-      <span>⚠️</span>
-      <span>Immutable data. Stored permanently on <a 
-        href="https://explorer.mendoza.hoodi.arkiv.network" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        style={{ color: '#0066cc', textDecoration: 'underline' }}
-      >Arkiv</a>. Edits only change what is displayed.</span>
+      <span style={{ fontSize: '12px' }}>🌱</span>
+      <span>caution: immutable and owned by you</span>
     </div>
   );
 }
@@ -173,19 +198,27 @@ export default function Me() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  // Initialize dark mode - use false for SSR, update in useEffect to avoid hydration mismatch
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Set dark mode from localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved === 'true') {
+        setDarkMode(true);
+      }
+    }
+  }, []);
   const [, setNow] = useState(Date.now());
   const [txHashMap, setTxHashMap] = useState<Record<string, string>>({});
   const [editingProfile, setEditingProfile] = useState(false);
   const [showArkivWarning, setShowArkivWarning] = useState(false);
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
 
-  // Check if user has dismissed the warning before
+  // Show warning popup every time the page loads
   useEffect(() => {
-    const hasSeenWarning = localStorage.getItem('arkiv-warning-dismissed');
-    if (!hasSeenWarning) {
-      setShowArkivWarning(true);
-    }
+    setShowArkivWarning(true);
   }, []);
 
   // Check for connected wallet on mount
@@ -247,11 +280,13 @@ export default function Me() {
     return () => clearInterval(interval);
   }, []);
 
-  // Set body background to match theme
+  // Set body background to match theme and persist dark mode
   useEffect(() => {
-    document.body.style.backgroundColor = darkMode ? '#1a1a1a' : '#f8f9fa';
+    document.body.style.backgroundColor = darkMode ? '#0a0a0a' : '#f5f9f5';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
+    // Persist dark mode preference
+    localStorage.setItem('darkMode', darkMode.toString());
     return () => {
       document.body.style.backgroundColor = '';
       document.body.style.margin = '';
@@ -454,11 +489,14 @@ export default function Me() {
     const expiresInValue = formData.get('expiresIn') as string;
     const expiresInUnit = formData.get('expiresInUnit') as string;
 
-    let expiresIn: number | undefined;
-    if (expiresInValue) {
+    // Calculate expiresIn in seconds
+    let expiresIn: number | undefined = undefined;
+    if (expiresInValue && expiresInValue.trim() !== '') {
       const value = parseFloat(expiresInValue);
-      const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
-      expiresIn = Math.floor(value * multiplier);
+      if (!isNaN(value) && value > 0) {
+        const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
+        expiresIn = Math.floor(value * multiplier);
+      }
     }
 
     if (!connectedWallet) {
@@ -467,14 +505,14 @@ export default function Me() {
       return;
     }
 
+    // Always send expiresIn if calculated, otherwise don't include it (will use default)
     const payload = {
       action: 'createAsk',
       wallet: connectedWallet,
       skill,
       message,
-      expiresIn: expiresIn || undefined,
+      ...(expiresIn !== undefined && expiresIn > 0 ? { expiresIn } : {}),
     };
-    console.log('Creating ask:', payload);
 
     try {
       const res = await fetch('/api/me', {
@@ -514,11 +552,14 @@ export default function Me() {
     const expiresInValue = formData.get('expiresIn') as string;
     const expiresInUnit = formData.get('expiresInUnit') as string;
 
-    let expiresIn: number | undefined;
-    if (expiresInValue) {
+    // Calculate expiresIn in seconds
+    let expiresIn: number | undefined = undefined;
+    if (expiresInValue && expiresInValue.trim() !== '') {
       const value = parseFloat(expiresInValue);
-      const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
-      expiresIn = Math.floor(value * multiplier);
+      if (!isNaN(value) && value > 0) {
+        const multiplier = expiresInUnit === 'minutes' ? 60 : expiresInUnit === 'hours' ? 3600 : expiresInUnit === 'days' ? 86400 : 1;
+        expiresIn = Math.floor(value * multiplier);
+      }
     }
 
     if (!connectedWallet) {
@@ -527,15 +568,15 @@ export default function Me() {
       return;
     }
 
+    // Always send expiresIn if calculated, otherwise don't include it (will use default)
     const payload = {
       action: 'createOffer',
       wallet: connectedWallet,
       skill,
       message,
       availabilityWindow,
-      expiresIn: expiresIn || undefined,
+      ...(expiresIn !== undefined && expiresIn > 0 ? { expiresIn } : {}),
     };
-    console.log('Creating offer:', payload);
 
     try {
       const res = await fetch('/api/me', {
@@ -566,18 +607,22 @@ export default function Me() {
 
   // Theme colors based on dark mode
   const theme = {
-    bg: darkMode ? '#1a1a1a' : '#f8f9fa',
-    cardBg: darkMode ? '#2d2d2d' : '#ffffff',
+    bg: darkMode ? '#0a0a0a' : '#f5f9f5',
+    cardBg: darkMode ? 'rgba(26, 26, 26, 0.85)' : 'rgba(255, 255, 255, 0.9)',
     text: darkMode ? '#e0e0e0' : '#212529',
     textSecondary: darkMode ? '#b0b0b0' : '#6c757d',
     textTertiary: darkMode ? '#888888' : '#868e96',
-    border: darkMode ? '#404040' : '#dee2e6',
-    borderLight: darkMode ? '#353535' : '#e9ecef',
-    inputBg: darkMode ? '#353535' : '#ffffff',
-    inputBorder: darkMode ? '#505050' : '#ced4da',
-    hoverBg: darkMode ? '#3a3a3a' : '#f1f3f5',
-    shadow: darkMode ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
-    shadowHover: darkMode ? '0 4px 12px rgba(0, 0, 0, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.1)',
+    border: darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.15)',
+    borderLight: darkMode ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.08)',
+    inputBg: darkMode ? 'rgba(35, 35, 35, 0.8)' : 'rgba(255, 255, 255, 0.95)',
+    inputBorder: darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)',
+    hoverBg: darkMode ? 'rgba(76, 175, 80, 0.1)' : 'rgba(76, 175, 80, 0.05)',
+    shadow: darkMode 
+      ? '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 20px rgba(76, 175, 80, 0.1)' 
+      : '0 4px 16px rgba(0, 0, 0, 0.08), 0 0 10px rgba(76, 175, 80, 0.05)',
+    shadowHover: darkMode 
+      ? '0 6px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(76, 175, 80, 0.15)' 
+      : '0 6px 24px rgba(0, 0, 0, 0.12), 0 0 15px rgba(76, 175, 80, 0.08)',
     errorBg: darkMode ? '#3a1f1f' : '#ffebee',
     errorBorder: darkMode ? '#5a2f2f' : '#f44336',
     errorText: darkMode ? '#ff6b6b' : '#c62828',
@@ -619,21 +664,66 @@ export default function Me() {
     );
   }
 
+  // Bioluminescent forest background pattern
+  const forestPattern = `data:image/svg+xml,${encodeURIComponent(`
+    <svg width="600" height="600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="glow1" cx="50%" cy="50%">
+          <stop offset="0%" stop-color="rgba(76, 175, 80, 0.3)" stop-opacity="1"/>
+          <stop offset="100%" stop-color="rgba(76, 175, 80, 0)" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="glow2" cx="50%" cy="50%">
+          <stop offset="0%" stop-color="rgba(139, 195, 74, 0.25)" stop-opacity="1"/>
+          <stop offset="100%" stop-color="rgba(139, 195, 74, 0)" stop-opacity="0"/>
+        </radialGradient>
+        <pattern id="forest" x="0" y="0" width="300" height="300" patternUnits="userSpaceOnUse">
+          <circle cx="80" cy="80" r="6" fill="url(#glow1)"/>
+          <circle cx="220" cy="60" r="5" fill="url(#glow2)"/>
+          <circle cx="150" cy="150" r="8" fill="url(#glow1)"/>
+          <circle cx="50" cy="200" r="5" fill="url(#glow2)"/>
+          <path d="M 80,80 Q 120,100 150,150" stroke="rgba(76, 175, 80, 0.12)" stroke-width="1" fill="none"/>
+          <path d="M 220,60 Q 200,120 150,150" stroke="rgba(139, 195, 74, 0.1)" stroke-width="1" fill="none"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#forest)"/>
+    </svg>
+  `)}`;
+
   return (
     <main style={{ 
       minHeight: '100vh',
       backgroundColor: theme.bg,
+      backgroundImage: `url("${forestPattern}")`,
+      backgroundSize: darkMode ? '600px 600px' : '400px 400px',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'repeat',
       transition: 'background-color 0.3s ease',
       width: '100%',
       margin: 0,
       padding: 0,
+      position: 'relative',
     }}>
+      {/* Subtle glowing overlay for dark mode */}
+      {darkMode && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 20% 30%, rgba(76, 175, 80, 0.06) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(139, 195, 74, 0.04) 0%, transparent 50%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }} />
+      )}
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto',
         padding: 'clamp(16px, 4vw, 32px)',
         width: '100%',
         boxSizing: 'border-box',
+        position: 'relative',
+        zIndex: 1,
       }}>
         <div style={{ 
           display: 'flex', 
@@ -644,9 +734,14 @@ export default function Me() {
         <h1 style={{ 
           margin: 0,
           color: theme.text,
-          transition: 'color 0.3s ease'
+          transition: 'color 0.3s ease',
+          textShadow: darkMode 
+            ? '0 0 20px rgba(76, 175, 80, 0.2), 0 0 40px rgba(76, 175, 80, 0.1)' 
+            : 'none',
+          fontSize: 'clamp(28px, 5vw, 36px)',
+          fontWeight: '600',
         }}>
-          My Dashboard
+          🌲 My Garden
         </h1>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
@@ -679,24 +774,32 @@ export default function Me() {
               padding: '12px 24px',
               fontSize: '16px',
               fontWeight: '600',
-              backgroundColor: '#0066cc',
+              background: darkMode
+                ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.9) 0%, rgba(46, 125, 50, 0.9) 100%)'
+                : 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
               color: 'white',
-              border: 'none',
-              borderRadius: '6px',
+              border: darkMode ? '1px solid rgba(76, 175, 80, 0.5)' : 'none',
+              borderRadius: '10px',
               cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              transition: 'background-color 0.2s, transform 0.1s',
+              boxShadow: darkMode
+                ? '0 4px 16px rgba(76, 175, 80, 0.3), 0 0 24px rgba(76, 175, 80, 0.1)'
+                : '0 4px 16px rgba(76, 175, 80, 0.25)',
+              transition: 'all 0.3s ease',
             }}
             onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#0052a3';
-              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = darkMode
+                ? '0 6px 20px rgba(76, 175, 80, 0.4), 0 0 32px rgba(76, 175, 80, 0.15)'
+                : '0 6px 20px rgba(76, 175, 80, 0.35)';
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#0066cc';
               e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = darkMode
+                ? '0 4px 16px rgba(76, 175, 80, 0.3), 0 0 24px rgba(76, 175, 80, 0.1)'
+                : '0 4px 16px rgba(76, 175, 80, 0.25)';
             }}
           >
-            Enter Network →
+            🌳 Enter Forest →
           </button>
         </div>
       </div>
@@ -717,13 +820,13 @@ export default function Me() {
 
       {/* Arkiv Immutability Warning Modal */}
       {showArkivWarning && (
-        <div style={{
+        <div         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backgroundColor: darkMode ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.4)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -755,11 +858,15 @@ export default function Me() {
             }}>
               <h2 style={{
                 margin: 0,
-                fontSize: '24px',
-                fontWeight: '700',
-                color: theme.errorText,
+                fontSize: '28px',
+                fontWeight: '600',
+                color: darkMode ? '#90c695' : '#2d7a32',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
               }}>
-                ⚠️ Attention!
+                <span>🌱🌿🌸</span>
+                <span>Welcome to the Infinite Garden</span>
               </h2>
               <button
                 onClick={() => {
@@ -797,36 +904,32 @@ export default function Me() {
             <div style={{
               color: theme.text,
               fontSize: '16px',
-              lineHeight: '1.6',
+              lineHeight: '1.7',
               marginBottom: '24px',
             }}>
-              <p style={{ marginBottom: '16px' }}>
-                <strong>Everything entered on this site is stored on <a 
-                  href="https://explorer.mendoza.hoodi.arkiv.network" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style={{ 
-                    color: '#0066cc',
-                    textDecoration: 'underline',
-                  }}
-                >Arkiv</a> and is <strong style={{ color: theme.errorText }}>immutable</strong>.</strong>
-              </p>
-              
-              <p style={{ marginBottom: '16px' }}>
-                When you edit your profile, it only changes on the front-end. Each edit creates a new entity on Arkiv. Your previous data remains permanently stored on the blockchain.
-              </p>
-              
-              <p style={{ 
-                marginBottom: 0,
-                padding: '12px',
-                backgroundColor: theme.errorBg,
-                borderRadius: '6px',
-                border: `1px solid ${theme.errorBorder}`,
-                color: theme.errorText,
-                fontWeight: '500',
+              <div style={{ 
+                marginBottom: '24px',
+                padding: '20px',
+                backgroundColor: darkMode ? '#1a2e1a' : '#f0f9f0',
+                borderRadius: '10px',
+                border: `2px solid ${darkMode ? '#2d4a2d' : '#90c695'}`,
+                color: darkMode ? '#90c695' : '#2d7a32',
+                boxShadow: darkMode ? 'inset 0 2px 4px rgba(0, 0, 0, 0.1)' : 'inset 0 2px 4px rgba(144, 198, 149, 0.1)',
               }}>
-                ⚠️ Please be careful with all information you share. Once stored on Arkiv, it cannot be deleted or modified.
-              </p>
+                <p style={{ margin: 0, display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '17px', lineHeight: '1.7' }}>
+                  <span style={{ fontSize: '24px', marginTop: '2px', lineHeight: '1' }}>🌱</span>
+                  <span><strong>Caution:</strong> Your data is immutable and owned by you. This means it grows in the <a 
+                    href="https://explorer.mendoza.hoodi.arkiv.network" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      color: '#0066cc',
+                      textDecoration: 'underline',
+                      fontWeight: '500',
+                    }}
+                  >Arkiv garden</a> and cannot be deleted. Each edit plants a new seed and only displays a change on the front-end. Your previous growth remains forever in this infinite garden of knowledge. 🌺</span>
+                </p>
+              </div>
             </div>
 
             <button
@@ -836,75 +939,102 @@ export default function Me() {
               }}
               style={{
                 width: '100%',
-                padding: '12px 24px',
-                fontSize: '16px',
+                padding: '16px 28px',
+                fontSize: '18px',
                 fontWeight: '600',
-                backgroundColor: '#0066cc',
+                backgroundColor: darkMode ? '#2d7a32' : '#4caf50',
                 color: 'white',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: '10px',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                boxShadow: darkMode ? '0 4px 12px rgba(45, 122, 50, 0.4)' : '0 4px 12px rgba(76, 175, 80, 0.4)',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#0052a3';
+                e.currentTarget.style.backgroundColor = darkMode ? '#3d8a42' : '#5cbf60';
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                e.currentTarget.style.boxShadow = darkMode ? '0 6px 16px rgba(45, 122, 50, 0.5)' : '0 6px 16px rgba(76, 175, 80, 0.5)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#0066cc';
+                e.currentTarget.style.backgroundColor = darkMode ? '#2d7a32' : '#4caf50';
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = darkMode ? '0 4px 12px rgba(45, 122, 50, 0.4)' : '0 4px 12px rgba(76, 175, 80, 0.4)';
               }}
             >
-              I Understand
+              <span style={{ fontSize: '22px' }}>🌱</span>
+              <span>I Understand</span>
+              <span style={{ fontSize: '22px' }}>🌸</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Persistent Arkiv Warning Banner */}
+      {/* Persistent Arkiv Garden Banner */}
       <div style={{
         marginBottom: '24px',
-        padding: '14px 18px',
-        backgroundColor: darkMode ? '#2a1f1f' : '#fff3cd',
-        border: `1px solid ${darkMode ? '#5a2f2f' : '#ffc107'}`,
-        borderRadius: '8px',
+        padding: '16px 20px',
+        backgroundColor: darkMode ? '#1a2e1a' : '#f0f9f0',
+        border: `1px solid ${darkMode ? '#2d4a2d' : '#90c695'}`,
+        borderRadius: '10px',
         display: 'flex',
         alignItems: 'flex-start',
         gap: '12px',
+        boxShadow: darkMode ? '0 2px 8px rgba(0, 0, 0, 0.2)' : '0 2px 8px rgba(144, 198, 149, 0.15)',
       }}>
-        <span style={{ fontSize: '20px', flexShrink: 0 }}>⚠️</span>
-        <div style={{ flex: 1, color: darkMode ? '#ff6b6b' : '#856404', fontSize: '14px', lineHeight: '1.5' }}>
-          <strong>Data stored on Arkiv is immutable.</strong> All information you enter is permanently stored on the{' '}
-          <a 
+        <span style={{ fontSize: '28px', flexShrink: 0, marginTop: '2px', lineHeight: '1' }}>🌱🌿🌸</span>
+        <div style={{ flex: 1, color: darkMode ? '#90c695' : '#2d7a32', fontSize: '15px', lineHeight: '1.7' }}>
+          <strong>Caution:</strong> Your data is immutable and owned by you. This means it grows in the <a 
             href="https://explorer.mendoza.hoodi.arkiv.network" 
             target="_blank" 
             rel="noopener noreferrer"
             style={{ 
               color: '#0066cc',
               textDecoration: 'underline',
+              fontWeight: '600',
             }}
           >
-            Arkiv blockchain
-          </a>
-          {' '}and cannot be deleted or modified. Editing creates new entities. Previous data remains on-chain.
+            Arkiv garden
+          </a> and cannot be deleted. Each edit plants a new seed and only displays a change on the front-end. Your previous growth remains forever in this infinite garden of knowledge. 🌺
         </div>
       </div>
 
       <section style={{ 
         marginBottom: '40px', 
-        padding: '20px', 
+        padding: '24px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px',
+        borderRadius: '16px',
         backgroundColor: theme.cardBg,
+        backdropFilter: 'blur(10px)',
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {/* Subtle glow effect */}
+        {darkMode && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(76, 175, 80, 0.5), transparent)',
+          }} />
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ 
             color: theme.text,
             marginTop: 0,
             marginBottom: 0,
-            transition: 'color 0.3s ease'
+            transition: 'color 0.3s ease',
+            fontSize: 'clamp(20px, 4vw, 24px)',
+            fontWeight: '600',
           }}>
-            Wallet & Profile
+            🌳 Core Identity
           </h2>
           <button
             onClick={handleDisconnect}
@@ -989,32 +1119,238 @@ export default function Me() {
                   )}
                 </div>
 
-                {/* Skills / Roles */}
+                {/* RPG Skill Tree */}
                 <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
-                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Skills & Roles</h3>
-                  <div style={{ marginBottom: '8px', color: theme.text }}>
-                    <strong style={{ color: theme.textSecondary }}>Skills:</strong> {data.profile.skills || (data.profile.skillsArray ? data.profile.skillsArray.join(', ') : 'None')}
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>⚔️</span>
+                    <span>Skill Tree</span>
+                  </h3>
+                  
+                  {(() => {
+                    // Build skill tree data
+                    const skills = data.profile.skillsArray || (data.profile.skills ? data.profile.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+                    const skillUsage = new Map(data.profile.topSkillsUsage?.map(item => [item.skill.toLowerCase(), item.count]) || []);
+                    
+                    // Calculate skill levels (0-100) based on usage
+                    const skillLevels = new Map<string, number>();
+                    skills.forEach(skill => {
+                      const usage = skillUsage.get(skill.toLowerCase()) || 0;
+                      // Level = min(100, usage * 10) - scale usage to 0-100
+                      const level = Math.min(100, usage * 10);
+                      skillLevels.set(skill, level);
+                    });
+                    
+                    // Group skills into tree branches (by first letter or category)
+                    const skillGroups: { [key: string]: string[] } = {};
+                    skills.forEach(skill => {
+                      const category = skill.charAt(0).toUpperCase();
+                      if (!skillGroups[category]) skillGroups[category] = [];
+                      skillGroups[category].push(skill);
+                    });
+                    
+                    const categories = Object.keys(skillGroups).sort();
+                    
+                    return (
+                      <div style={{
+                        position: 'relative',
+                        minHeight: '400px',
+                        padding: '40px 20px',
+                        backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+                        borderRadius: '12px',
+                        border: `2px solid ${darkMode ? '#4a4a4a' : '#ddd'}`,
+                        backgroundImage: darkMode 
+                          ? `radial-gradient(circle at 20% 50%, rgba(76, 175, 80, 0.1) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 80%, rgba(156, 39, 176, 0.1) 0%, transparent 50%)`
+                          : `radial-gradient(circle at 20% 50%, rgba(76, 175, 80, 0.05) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 80%, rgba(156, 39, 176, 0.05) 0%, transparent 50%)`,
+                        overflow: 'auto'
+                      }}>
+                        <svg 
+                          width="100%" 
+                          height="100%" 
+                          style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            pointerEvents: 'none',
+                            zIndex: 0
+                          }}
+                        >
+                          {/* Draw connecting lines between skills in same category */}
+                          {categories.map((category, catIdx) => {
+                            const categorySkills = skillGroups[category];
+                            return categorySkills.map((skill, skillIdx) => {
+                              if (skillIdx === 0) return null;
+                              const prevSkill = categorySkills[skillIdx - 1];
+                              const x1 = 120 + (catIdx * 200);
+                              const y1 = 80 + (skillIdx - 1) * 120;
+                              const x2 = 120 + (catIdx * 200);
+                              const y2 = 80 + skillIdx * 120;
+                              return (
+                                <line
+                                  key={`${category}-${skillIdx}`}
+                                  x1={x1}
+                                  y1={y1}
+                                  x2={x2}
+                                  y2={y2}
+                                  stroke={darkMode ? '#4a4a4a' : '#ccc'}
+                                  strokeWidth="2"
+                                  strokeDasharray="5,5"
+                                  opacity="0.5"
+                                />
+                              );
+                            }).filter(Boolean);
+                          })}
+                        </svg>
+                        
+                        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexWrap: 'wrap', gap: '40px', justifyContent: 'flex-start' }}>
+                          {categories.map((category, catIdx) => (
+                            <div key={category} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                              {skillGroups[category].map((skill, skillIdx) => {
+                                const level = skillLevels.get(skill) || 0;
+                                const isUnlocked = level > 0 || skillIdx === 0; // First skill always unlocked
+                                const levelInt = Math.floor(level);
+                                
+                                return (
+                                  <div
+                                    key={skill}
+                                    style={{
+                                      position: 'relative',
+                                      width: '120px',
+                                      height: '120px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: isUnlocked
+                                        ? (darkMode 
+                                            ? `radial-gradient(circle, ${levelInt > 50 ? '#4caf50' : '#90c695'} 0%, #2d4a2d 100%)`
+                                            : `radial-gradient(circle, ${levelInt > 50 ? '#d4edda' : '#f0f9f0'} 0%, #ffffff 100%)`)
+                                        : (darkMode ? '#1a1a1a' : '#e0e0e0'),
+                                      border: `3px solid ${isUnlocked 
+                                        ? (levelInt > 50 ? '#ffd700' : levelInt > 25 ? '#ffa500' : '#90c695')
+                                        : '#666'}`,
+                                      borderRadius: '50%',
+                                      boxShadow: isUnlocked && levelInt > 50
+                                        ? `0 0 20px ${darkMode ? 'rgba(255, 215, 0, 0.5)' : 'rgba(255, 215, 0, 0.3)'}`
+                                        : '0 4px 12px rgba(0, 0, 0, 0.2)',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.3s ease',
+                                      opacity: isUnlocked ? 1 : 0.5
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (isUnlocked) {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.boxShadow = `0 0 30px ${darkMode ? 'rgba(255, 215, 0, 0.7)' : 'rgba(255, 215, 0, 0.5)'}`;
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (isUnlocked) {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                        e.currentTarget.style.boxShadow = isUnlocked && levelInt > 50
+                                          ? `0 0 20px ${darkMode ? 'rgba(255, 215, 0, 0.5)' : 'rgba(255, 215, 0, 0.3)'}`
+                                          : '0 4px 12px rgba(0, 0, 0, 0.2)';
+                                      }
+                                    }}
+                                    title={`${skill} - Level ${levelInt}`}
+                                  >
+                                    <div style={{
+                                      fontSize: '24px',
+                                      marginBottom: '4px',
+                                      filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                                    }}>
+                                      {levelInt > 50 ? '⭐' : levelInt > 25 ? '✨' : '🌱'}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '11px',
+                                      fontWeight: 'bold',
+                                      color: isUnlocked ? theme.text : theme.textSecondary,
+                                      textAlign: 'center',
+                                      padding: '0 4px',
+                                      textTransform: 'capitalize'
+                                    }}>
+                                      {skill.length > 10 ? skill.substring(0, 8) + '...' : skill}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '18px',
+                                      fontWeight: 'bold',
+                                      color: isUnlocked 
+                                        ? (levelInt > 50 ? '#ffd700' : levelInt > 25 ? '#ffa500' : '#4caf50')
+                                        : '#666',
+                                      marginTop: '4px'
+                                    }}>
+                                      {levelInt}
+                                    </div>
+                                    {isUnlocked && (
+                                      <div style={{
+                                        position: 'absolute',
+                                        bottom: '-8px',
+                                        width: '80px',
+                                        height: '4px',
+                                        backgroundColor: darkMode ? '#2a2a2a' : '#e0e0e0',
+                                        borderRadius: '2px',
+                                        overflow: 'hidden'
+                                      }}>
+                                        <div style={{
+                                          width: `${levelInt}%`,
+                                          height: '100%',
+                                          background: levelInt > 50 
+                                            ? 'linear-gradient(90deg, #ffd700, #ffa500)'
+                                            : levelInt > 25
+                                            ? 'linear-gradient(90deg, #ffa500, #4caf50)'
+                                            : 'linear-gradient(90deg, #4caf50, #90c695)',
+                                          transition: 'width 0.3s ease',
+                                          boxShadow: `0 0 8px ${levelInt > 50 ? '#ffd700' : '#4caf50'}`
+                                        }} />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {skills.length === 0 && (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '60px 20px',
+                            color: theme.textSecondary,
+                            fontSize: '14px'
+                          }}>
+                            No skills unlocked yet. Add skills to your profile to start your journey! 🌱
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Additional info */}
+                  <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: theme.textSecondary }}>
+                    {data.profile.seniority && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Class:</strong> {data.profile.seniority}
+                      </div>
+                    )}
+                    {data.profile.domainsOfInterest && data.profile.domainsOfInterest.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Domains:</strong> {data.profile.domainsOfInterest.slice(0, 3).join(', ')}
+                        {data.profile.domainsOfInterest.length > 3 && '...'}
+                      </div>
+                    )}
+                    {data.profile.mentorRoles && data.profile.mentorRoles.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Mentor:</strong> {data.profile.mentorRoles.slice(0, 2).join(', ')}
+                        {data.profile.mentorRoles.length > 2 && '...'}
+                      </div>
+                    )}
+                    {data.profile.learnerRoles && data.profile.learnerRoles.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Learner:</strong> {data.profile.learnerRoles.slice(0, 2).join(', ')}
+                        {data.profile.learnerRoles.length > 2 && '...'}
+                      </div>
+                    )}
                   </div>
-                  {data.profile.seniority && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Seniority:</strong> {data.profile.seniority}
-                    </div>
-                  )}
-                  {data.profile.domainsOfInterest && data.profile.domainsOfInterest.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Domains of Interest:</strong> {data.profile.domainsOfInterest.join(', ')}
-                    </div>
-                  )}
-                  {data.profile.mentorRoles && data.profile.mentorRoles.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Mentor Roles:</strong> {data.profile.mentorRoles.join(', ')}
-                    </div>
-                  )}
-                  {data.profile.learnerRoles && data.profile.learnerRoles.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Learner Roles:</strong> {data.profile.learnerRoles.join(', ')}
-                    </div>
-                  )}
                 </div>
 
                 {/* Reputation Panel */}
@@ -1219,7 +1555,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1239,7 +1575,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1259,7 +1595,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1279,7 +1615,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1301,7 +1637,7 @@ export default function Me() {
                         resize: 'vertical',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1321,7 +1657,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1341,7 +1677,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1404,7 +1740,9 @@ export default function Me() {
                         }}
                       />
                     </div>
-                    <ArkivHelperText darkMode={darkMode} />
+                    <div style={{ marginTop: '4px' }}>
+                      <ImmutableCaution darkMode={darkMode} />
+                    </div>
                   </div>
                 </div>
 
@@ -1429,7 +1767,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1453,7 +1791,6 @@ export default function Me() {
                       <option value="advanced">Advanced</option>
                       <option value="expert">Expert</option>
                     </select>
-                    <ArkivHelperText darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1473,7 +1810,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1493,7 +1830,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1513,7 +1850,7 @@ export default function Me() {
                         fontSize: '14px',
                       }}
                     />
-                    <ArkivHelperText darkMode={darkMode} />
+                    <ImmutableCaution darkMode={darkMode} />
                   </div>
                 </div>
 
@@ -1585,7 +1922,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1604,7 +1941,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1623,7 +1960,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1642,7 +1979,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1661,7 +1998,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1680,7 +2017,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1739,7 +2076,9 @@ export default function Me() {
                     }}
                   />
                 </div>
-                <ArkivHelperText darkMode={darkMode} />
+                <div style={{ marginTop: '4px' }}>
+                  <ImmutableCaution darkMode={darkMode} />
+                </div>
               </div>
             </div>
 
@@ -1763,7 +2102,7 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
+                <ImmutableCaution darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1786,7 +2125,6 @@ export default function Me() {
                   <option value="advanced">Advanced</option>
                   <option value="expert">Expert</option>
                 </select>
-                <ArkivHelperText darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1805,7 +2143,6 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1824,7 +2161,6 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
@@ -1843,7 +2179,6 @@ export default function Me() {
                     fontSize: '14px',
                   }}
                 />
-                <ArkivHelperText darkMode={darkMode} />
               </div>
             </div>
 
@@ -1871,20 +2206,35 @@ export default function Me() {
       {/* Activity Summary */}
       <section style={{ 
         marginBottom: '40px', 
-        padding: '20px', 
+        padding: '24px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px',
+        borderRadius: '16px',
         backgroundColor: theme.cardBg,
+        backdropFilter: 'blur(10px)',
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {darkMode && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(76, 175, 80, 0.5), transparent)',
+          }} />
+        )}
         <h2 style={{ 
           color: theme.text,
           marginTop: 0,
           marginBottom: '20px',
-          transition: 'color 0.3s ease'
+          transition: 'color 0.3s ease',
+          fontSize: 'clamp(20px, 4vw, 24px)',
+          fontWeight: '600',
         }}>
-          Activity Summary
+          🌿 Activity Summary
         </h2>
         
         <div style={{ 
@@ -1954,12 +2304,137 @@ export default function Me() {
           </div>
         </div>
 
+        {/* Upcoming Meetings */}
+        {(() => {
+          const now = Date.now();
+          const upcomingSessions = data.sessions.filter((session) => {
+            if (session.status === 'completed' || session.status === 'cancelled') return false;
+            if (!session.sessionDate) return false;
+            const sessionTime = new Date(session.sessionDate).getTime();
+            return sessionTime >= now;
+          }).sort((a, b) => {
+            // Sort by status (in-progress first, then pending, then scheduled), then by sessionDate (earliest first)
+            const statusOrder: Record<string, number> = { 'in-progress': 0, 'pending': 1, 'scheduled': 2 };
+            const aOrder = statusOrder[a.status] ?? 3;
+            const bOrder = statusOrder[b.status] ?? 3;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            const aTime = new Date(a.sessionDate).getTime();
+            const bTime = new Date(b.sessionDate).getTime();
+            return aTime - bTime;
+          });
+
+          if (upcomingSessions.length === 0) return null;
+
+          return (
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>📅 Upcoming Meetings</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {upcomingSessions.map((session) => {
+                  const sessionTime = new Date(session.sessionDate);
+                  const isScheduled = session.status === 'scheduled';
+                  const hasJitsi = isScheduled && session.videoProvider === 'jitsi' && session.videoJoinUrl;
+                  
+                  return (
+                    <div key={session.key} style={{
+                      padding: '16px',
+                      backgroundColor: theme.hoverBg,
+                      borderRadius: '8px',
+                      border: `1px solid ${theme.borderLight}`,
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = theme.shadowHover;
+                      e.currentTarget.style.borderColor = theme.border;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = theme.borderLight;
+                    }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '15px', color: theme.text, fontWeight: '600', marginBottom: '6px' }}>
+                            {session.skill} • {session.mentorWallet === data.wallet ? 'Mentor' : 'Learner'}
+                          </div>
+                          <div style={{ fontSize: '13px', color: theme.textSecondary, marginBottom: '4px' }}>
+                            {sessionTime.toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </div>
+                          <div style={{ fontSize: '12px', color: theme.textTertiary }}>
+                            {sessionTime.toLocaleTimeString('en-US', { 
+                              hour: 'numeric', 
+                              minute: '2-digit',
+                              hour12: true 
+                            })} • {session.duration || 60} min
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          backgroundColor: session.status === 'scheduled' ? (darkMode ? '#2d3a4a' : '#d1ecf1') :
+                                          session.status === 'in-progress' ? (darkMode ? '#4a3d2d' : '#fff3cd') :
+                                          (darkMode ? '#3a2a1a' : '#fff3e0'),
+                          color: session.status === 'scheduled' ? (darkMode ? '#90c7ee' : '#0c5460') :
+                                 session.status === 'in-progress' ? (darkMode ? '#ffd700' : '#856404') :
+                                 (darkMode ? '#ffa500' : '#ffa500'),
+                          fontWeight: '500',
+                          textTransform: 'capitalize'
+                        }}>
+                          {session.status === 'pending' ? '⏳ Pending' : session.status === 'scheduled' ? '✓ Scheduled' : session.status}
+                        </div>
+                      </div>
+                      {hasJitsi && (
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                          <a
+                            href={session.videoJoinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 16px',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              backgroundColor: '#4caf50',
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#45a049';
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#4caf50';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            🎥 Join Video Call
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Recent Sessions */}
-        {data.sessions.length > 0 && (
+        {data.sessions.filter(s => s.status === 'completed' || s.status === 'cancelled').length > 0 && (
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>Recent Sessions</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {data.sessions
+                .filter(s => s.status === 'completed' || s.status === 'cancelled')
                 .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime())
                 .slice(0, 5)
                 .map((session) => (
@@ -1985,12 +2460,8 @@ export default function Me() {
                       borderRadius: '4px',
                       fontSize: '12px',
                       backgroundColor: session.status === 'completed' ? (darkMode ? '#2d4a2d' : '#d4edda') : 
-                                      session.status === 'scheduled' ? (darkMode ? '#2d3a4a' : '#d1ecf1') :
-                                      session.status === 'in-progress' ? (darkMode ? '#4a3d2d' : '#fff3cd') :
                                       (darkMode ? '#4a2d2d' : '#f8d7da'),
                       color: session.status === 'completed' ? (darkMode ? '#90ee90' : '#155724') :
-                             session.status === 'scheduled' ? (darkMode ? '#90c7ee' : '#0c5460') :
-                             session.status === 'in-progress' ? (darkMode ? '#ffd700' : '#856404') :
                              (darkMode ? '#ff6b6b' : '#721c24'),
                       fontWeight: '500',
                       textTransform: 'capitalize'
@@ -2070,20 +2541,36 @@ export default function Me() {
 
       <section style={{ 
         marginBottom: '40px', 
-        padding: '20px', 
+        padding: '24px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px',
+        borderRadius: '16px',
         backgroundColor: theme.cardBg,
+        backdropFilter: 'blur(10px)',
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {darkMode && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(239, 83, 80, 0.4), transparent)',
+          }} />
+        )}
         <h2 style={{ 
           color: theme.text,
           marginTop: 0,
-          transition: 'color 0.3s ease'
+          transition: 'color 0.3s ease',
+          fontSize: 'clamp(20px, 4vw, 24px)',
+          fontWeight: '600',
         }}>
-          My Asks ({data.asks.length})
+          💫 My Asks ({data.asks.length})
         </h2>
+        <ArkivHelperText darkMode={darkMode} />
         <form onSubmit={handleCreateAsk} style={{ 
           marginBottom: '20px', 
           padding: '15px', 
@@ -2108,7 +2595,6 @@ export default function Me() {
                 color: theme.text,
               }} 
             />
-            <ArkivHelperText darkMode={darkMode} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>
@@ -2127,7 +2613,6 @@ export default function Me() {
                 color: theme.text,
               }} 
             />
-            <ArkivHelperText darkMode={darkMode} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: theme.text }}>
@@ -2268,20 +2753,36 @@ export default function Me() {
 
       <section style={{ 
         marginBottom: '40px', 
-        padding: '20px', 
+        padding: '24px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px',
+        borderRadius: '16px',
         backgroundColor: theme.cardBg,
+        backdropFilter: 'blur(10px)',
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {darkMode && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(76, 175, 80, 0.4), transparent)',
+          }} />
+        )}
         <h2 style={{ 
           color: theme.text,
           marginTop: 0,
-          transition: 'color 0.3s ease'
+          transition: 'color 0.3s ease',
+          fontSize: 'clamp(20px, 4vw, 24px)',
+          fontWeight: '600',
         }}>
-          My Offers ({data.offers.length})
+          🌸 My Offers ({data.offers.length})
         </h2>
+        <ArkivHelperText darkMode={darkMode} />
         <form onSubmit={handleCreateOffer} style={{ 
           marginBottom: '20px', 
           padding: '15px', 
@@ -2306,7 +2807,6 @@ export default function Me() {
                 color: theme.text,
               }} 
             />
-            <ArkivHelperText darkMode={darkMode} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>
@@ -2325,7 +2825,6 @@ export default function Me() {
                 color: theme.text,
               }} 
             />
-            <ArkivHelperText darkMode={darkMode} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>
@@ -2344,7 +2843,6 @@ export default function Me() {
                 color: theme.text,
               }} 
             />
-            <ArkivHelperText darkMode={darkMode} />
           </div>
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: theme.text }}>

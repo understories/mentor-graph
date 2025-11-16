@@ -26,6 +26,28 @@ type Offer = {
   txHash?: string;
 };
 
+type Session = {
+  key: string;
+  mentorWallet: string;
+  learnerWallet: string;
+  skill: string;
+  spaceId: string;
+  createdAt: string;
+  sessionDate: string;
+  status: 'pending' | 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  duration?: number;
+  notes?: string;
+  feedbackKey?: string;
+  txHash?: string;
+  mentorConfirmed?: boolean;
+  learnerConfirmed?: boolean;
+  // Jitsi video meeting fields
+  videoProvider?: 'jitsi' | 'none' | 'custom';
+  videoRoomName?: string;
+  videoJoinUrl?: string;
+  videoJwtToken?: string;
+};
+
 type WebNode = {
   id: string;
   type: 'ask' | 'offer';
@@ -82,6 +104,7 @@ export default function Network() {
   const [asks, setAsks] = useState<Ask[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [skillFilter, setSkillFilter] = useState('');
   const [currentFilterSkill, setCurrentFilterSkill] = useState<string>('');
@@ -98,17 +121,49 @@ export default function Network() {
   const [ttlFilter, setTtlFilter] = useState<string>(''); // 'active' | 'expiring' | 'all'
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [userWallet, setUserWallet] = useState<string>('');
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [showAnalytics, setShowAnalytics] = useState(true);
+  const [requestMeetingModal, setRequestMeetingModal] = useState<{ open: boolean; profile: any | null }>({ open: false, profile: null });
+  const [submittingMeeting, setSubmittingMeeting] = useState(false);
+  // Initialize dark mode - use false for SSR, update in useEffect to avoid hydration mismatch
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Set dark mode from localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved === 'true') {
+        setDarkMode(true);
+      }
+    }
+  }, []);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showProfiles, setShowProfiles] = useState(false);
+  const [showMeetings, setShowMeetings] = useState(false);
+  const [showAsks, setShowAsks] = useState(false);
+  const [showOffers, setShowOffers] = useState(false);
   const [viewMode, setViewMode] = useState<'matches' | 'skills' | 'wallets' | 'all'>('all');
   const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const [, setNow] = useState(Date.now());
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [clickedNodeId, setClickedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/me')
+    // Get connected wallet from localStorage (same as /me page)
+    const connectedWallet = localStorage.getItem('connectedWallet');
+    const walletToFetch = connectedWallet || undefined;
+    
+    // Build API URL with wallet query param if available
+    const apiUrl = walletToFetch ? `/api/me?wallet=${encodeURIComponent(walletToFetch)}` : '/api/me';
+    
+    fetch(apiUrl)
       .then(res => res.json())
       .then(data => {
         if (data.profile?.skills) {
@@ -116,6 +171,9 @@ export default function Network() {
         }
         if (data.wallet) {
           setUserWallet(data.wallet);
+        }
+        if (data.profile) {
+          setUserProfile(data.profile);
         }
       })
       .catch(err => console.error('Error fetching user profile:', err));
@@ -152,6 +210,7 @@ export default function Network() {
       let filteredAsks = data.asks || [];
       let filteredOffers = data.offers || [];
       let filteredProfiles = data.profiles || [];
+      let allSessions = data.sessions || [];
       
       // TTL filter for asks/offers
       if (filters?.ttl === 'active') {
@@ -265,6 +324,7 @@ export default function Network() {
       setAsks(filteredAsks);
       setOffers(filteredOffers);
       setProfiles(filteredProfiles);
+      setSessions(allSessions);
       setCurrentFilterSkill(filters?.skill || '');
     } catch (err) {
       console.error('Error fetching /api/network:', err);
@@ -284,11 +344,13 @@ export default function Network() {
     return () => clearInterval(interval);
   }, []);
 
-  // Set body background to match theme
+  // Set body background to match theme and persist dark mode
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? '#1a1a1a' : '#f8f9fa';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
+    // Persist dark mode preference
+    localStorage.setItem('darkMode', darkMode.toString());
     return () => {
       document.body.style.backgroundColor = '';
       document.body.style.margin = '';
@@ -479,65 +541,176 @@ export default function Network() {
     return { x: defaultX, y: defaultY };
   };
 
-  // Handle drag start
-  const handleDragStart = (e: React.MouseEvent, nodeId: string, currentX: number, currentY: number) => {
-    e.preventDefault();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const containerRect = (e.currentTarget.closest('[data-container]') as HTMLElement)?.getBoundingClientRect();
-    if (!containerRect) return;
-    
-    const offsetX = e.clientX - containerRect.left - currentX;
-    const offsetY = e.clientY - containerRect.top - currentY;
-    
-    setDraggingNode(nodeId);
-    setDragOffset({ x: offsetX, y: offsetY });
+  // Handle pan start (on container background)
+  const handlePanStart = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+      e.preventDefault();
+      setPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    }
   };
 
-  // Handle drag
+  // Handle pan move
+  const handlePanMove = (e: React.MouseEvent) => {
+    if (panning && panStart) {
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      });
+    }
+  };
+
+  // Handle pan end
+  const handlePanEnd = () => {
+    setPanning(false);
+    setPanStart(null);
+  };
+
+  // Handle drag start - only set up for potential drag, don't start dragging yet
+  const handleDragStart = (e: React.MouseEvent, nodeId: string, currentX: number, currentY: number) => {
+    e.stopPropagation(); // Prevent panning when clicking on nodes
+    // Store the initial mouse position and node ID to detect if it's a drag or click
+    setDragStartPos({ x: e.clientX, y: e.clientY });
+    setClickedNodeId(nodeId);
+  };
+
+  // Handle drag - check if mouse moved enough to start dragging
   const handleDrag = (e: React.MouseEvent) => {
+    if (panning && panStart) {
+      handlePanMove(e);
+      return;
+    }
+    
+    // If we have a drag start position but haven't started dragging yet, check if we should start
+    if (dragStartPos && clickedNodeId && !draggingNode) {
+      const dx = e.clientX - dragStartPos.x;
+      const dy = e.clientY - dragStartPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Only start dragging if mouse moved more than 5 pixels
+      if (distance > 5) {
+        const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
+        if (container && clickedNodeId) {
+          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+          if (clickedNode) {
+            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+            const containerRect = container.getBoundingClientRect();
+            
+            // Calculate the offset from mouse to node center at drag start
+            const mouseX = dragStartPos.x - containerRect.left;
+            const mouseY = dragStartPos.y - containerRect.top;
+            const nodeCenterX = nodePos.x * zoom + panOffset.x;
+            const nodeCenterY = nodePos.y * zoom + panOffset.y;
+            
+            setDragOffset({ 
+              x: mouseX - nodeCenterX, 
+              y: mouseY - nodeCenterY 
+            });
+            setDraggingNode(clickedNodeId);
+          }
+        }
+      }
+    }
+    
     if (!draggingNode || !dragOffset) return;
     
     const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
     if (!container) return;
     
     const containerRect = container.getBoundingClientRect();
-    const newX = e.clientX - containerRect.left - dragOffset.x;
-    const newY = e.clientY - containerRect.top - dragOffset.y;
-    
-    // Constrain to container bounds
-    const constrainedX = Math.max(80, Math.min(containerRect.width - 80, newX));
-    const constrainedY = Math.max(80, Math.min(600, newY));
+    // Calculate new position: mouse position minus offset, then account for pan/zoom
+    const mouseX = e.clientX - containerRect.left;
+    const mouseY = e.clientY - containerRect.top;
+    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
     
     setNodePositions(prev => ({
       ...prev,
-      [draggingNode]: { x: constrainedX, y: constrainedY }
+      [draggingNode]: { x: newX, y: newY }
     }));
   };
 
   // Handle drag end
   const handleDragEnd = () => {
-    setDraggingNode(null);
-    setDragOffset(null);
+    if (panning) {
+      handlePanEnd();
+    } else {
+      // If we were dragging, end the drag
+      if (draggingNode) {
+        setDraggingNode(null);
+        setDragOffset(null);
+      }
+      // Always clear drag start position and clicked node
+      setDragStartPos(null);
+      setClickedNodeId(null);
+    }
   };
 
-  // Add global mouse event listeners for dragging
+  // Handle zoom with mouse wheel
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.5, Math.min(2, zoom * delta));
+    setZoom(newZoom);
+  };
+
+  // Add global mouse event listeners for dragging and panning
   useEffect(() => {
-    if (draggingNode) {
+    if (draggingNode || panning || (dragStartPos && clickedNodeId)) {
       const handleMouseMove = (e: MouseEvent) => {
-        const container = document.querySelector('[data-container]') as HTMLElement;
-        if (!container || !dragOffset) return;
+        if (panning && panStart) {
+          setPanOffset({
+            x: e.clientX - panStart.x,
+            y: e.clientY - panStart.y
+          });
+          return;
+        }
         
-        const containerRect = container.getBoundingClientRect();
-        const newX = e.clientX - containerRect.left - dragOffset.x;
-        const newY = e.clientY - containerRect.top - dragOffset.y;
+        // Check if we should start dragging (mouse moved enough)
+        if (dragStartPos && clickedNodeId && !draggingNode) {
+          const dx = e.clientX - dragStartPos.x;
+          const dy = e.clientY - dragStartPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 5) {
+            const container = document.querySelector('[data-container]') as HTMLElement;
+            if (container && clickedNodeId) {
+              const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+              if (clickedNode) {
+                const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+                const containerRect = container.getBoundingClientRect();
+                
+                // Calculate the offset from mouse to node center at drag start
+                const mouseX = dragStartPos.x - containerRect.left;
+                const mouseY = dragStartPos.y - containerRect.top;
+                const nodeCenterX = nodePos.x * zoom + panOffset.x;
+                const nodeCenterY = nodePos.y * zoom + panOffset.y;
+                
+                setDragOffset({ 
+                  x: mouseX - nodeCenterX, 
+                  y: mouseY - nodeCenterY 
+                });
+                setDraggingNode(clickedNodeId);
+              }
+            }
+          }
+        }
         
-        const constrainedX = Math.max(80, Math.min(containerRect.width - 80, newX));
-        const constrainedY = Math.max(80, Math.min(600, newY));
-        
-        setNodePositions(prev => ({
-          ...prev,
-          [draggingNode]: { x: constrainedX, y: constrainedY }
-        }));
+        if (draggingNode && dragOffset) {
+          const container = document.querySelector('[data-container]') as HTMLElement;
+          if (!container) return;
+          
+          const containerRect = container.getBoundingClientRect();
+          const mouseX = e.clientX - containerRect.left;
+          const mouseY = e.clientY - containerRect.top;
+          const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+          const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
+          
+          setNodePositions(prev => ({
+            ...prev,
+            [draggingNode]: { x: newX, y: newY }
+          }));
+        }
       };
 
       const handleMouseUp = () => {
@@ -552,7 +725,7 @@ export default function Network() {
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggingNode, dragOffset]);
+  }, [draggingNode, dragOffset, dragStartPos, clickedNodeId, panning, panStart, panOffset, zoom, displayedNodes]);
 
   // Compute match score between an ask and offer (from spec)
   const computeMatchScore = (ask: WebNode, offer: WebNode): number => {
@@ -725,18 +898,22 @@ export default function Network() {
 
   // Theme colors based on dark mode (needed for loading state)
   const theme = {
-    bg: darkMode ? '#1a1a1a' : '#f8f9fa',
-    cardBg: darkMode ? '#2d2d2d' : '#ffffff',
+    bg: darkMode ? '#0a0a0a' : '#f5f9f5',
+    cardBg: darkMode ? 'rgba(26, 26, 26, 0.85)' : 'rgba(255, 255, 255, 0.9)',
     text: darkMode ? '#e0e0e0' : '#212529',
     textSecondary: darkMode ? '#b0b0b0' : '#6c757d',
     textTertiary: darkMode ? '#888888' : '#868e96',
-    border: darkMode ? '#404040' : '#dee2e6',
-    borderLight: darkMode ? '#353535' : '#e9ecef',
-    inputBg: darkMode ? '#353535' : '#ffffff',
-    inputBorder: darkMode ? '#505050' : '#ced4da',
-    hoverBg: darkMode ? '#3a3a3a' : '#f1f3f5',
-    shadow: darkMode ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
-    shadowHover: darkMode ? '0 4px 12px rgba(0, 0, 0, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.1)',
+    border: darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.15)',
+    borderLight: darkMode ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.08)',
+    inputBg: darkMode ? 'rgba(35, 35, 35, 0.8)' : 'rgba(255, 255, 255, 0.95)',
+    inputBorder: darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)',
+    hoverBg: darkMode ? 'rgba(76, 175, 80, 0.1)' : 'rgba(76, 175, 80, 0.05)',
+    shadow: darkMode 
+      ? '0 4px 16px rgba(0, 0, 0, 0.4), 0 0 20px rgba(76, 175, 80, 0.1)' 
+      : '0 4px 16px rgba(0, 0, 0, 0.08), 0 0 10px rgba(76, 175, 80, 0.05)',
+    shadowHover: darkMode 
+      ? '0 6px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(76, 175, 80, 0.15)' 
+      : '0 6px 24px rgba(0, 0, 0, 0.12), 0 0 15px rgba(76, 175, 80, 0.08)',
   };
 
   if (loading) {
@@ -757,15 +934,58 @@ export default function Network() {
     );
   }
 
+  // Bioluminescent forest background pattern
+  const forestPattern = `data:image/svg+xml,${encodeURIComponent(`
+    <svg width="600" height="600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="glow1" cx="50%" cy="50%">
+          <stop offset="0%" stop-color="rgba(76, 175, 80, 0.3)" stop-opacity="1"/>
+          <stop offset="100%" stop-color="rgba(76, 175, 80, 0)" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="glow2" cx="50%" cy="50%">
+          <stop offset="0%" stop-color="rgba(139, 195, 74, 0.25)" stop-opacity="1"/>
+          <stop offset="100%" stop-color="rgba(139, 195, 74, 0)" stop-opacity="0"/>
+        </radialGradient>
+        <pattern id="forest" x="0" y="0" width="300" height="300" patternUnits="userSpaceOnUse">
+          <circle cx="80" cy="80" r="6" fill="url(#glow1)"/>
+          <circle cx="220" cy="60" r="5" fill="url(#glow2)"/>
+          <circle cx="150" cy="150" r="8" fill="url(#glow1)"/>
+          <circle cx="50" cy="200" r="5" fill="url(#glow2)"/>
+          <path d="M 80,80 Q 120,100 150,150" stroke="rgba(76, 175, 80, 0.12)" stroke-width="1" fill="none"/>
+          <path d="M 220,60 Q 200,120 150,150" stroke="rgba(139, 195, 74, 0.1)" stroke-width="1" fill="none"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#forest)"/>
+    </svg>
+  `)}`;
+
   return (
     <main style={{ 
       minHeight: '100vh',
       backgroundColor: theme.bg,
+      backgroundImage: `url("${forestPattern}")`,
+      backgroundSize: darkMode ? '600px 600px' : '400px 400px',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'repeat',
       transition: 'background-color 0.3s ease',
       width: '100%',
       margin: 0,
       padding: 0,
+      position: 'relative',
     }}>
+      {/* Subtle glowing overlay for dark mode */}
+      {darkMode && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 20% 30%, rgba(76, 175, 80, 0.06) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(139, 195, 74, 0.04) 0%, transparent 50%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }} />
+      )}
       <div style={{
         maxWidth: '1600px',
         margin: '0 auto',
@@ -785,21 +1005,25 @@ export default function Network() {
         <div>
           <h1 style={{ 
             margin: 0, 
-            fontSize: '32px',
-            fontWeight: '700',
+            fontSize: 'clamp(28px, 5vw, 36px)',
+            fontWeight: '600',
             color: theme.text,
-            letterSpacing: '-0.5px',
-            transition: 'color 0.3s ease'
+            letterSpacing: '-0.02em',
+            transition: 'color 0.3s ease',
+            textShadow: darkMode 
+              ? '0 0 20px rgba(76, 175, 80, 0.2), 0 0 40px rgba(76, 175, 80, 0.1)' 
+              : 'none',
           }}>
-            Network Analytics
+            🌲 Network Forest
           </h1>
           <p style={{ 
             margin: '8px 0 0 0',
-            fontSize: '14px',
+            fontSize: '16px',
             color: theme.textSecondary,
-            transition: 'color 0.3s ease'
+            transition: 'color 0.3s ease',
+            fontStyle: 'italic',
           }}>
-            Arkiv-powered mentorship network visualization
+            Arkiv-powered mentorship network visualization • Let knowledge and network light our way in the dark forest 🌱
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -886,26 +1110,58 @@ export default function Network() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Collapsible */}
       <section style={{ 
         marginBottom: '24px', 
-        padding: '20px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px', 
+        borderRadius: '12px', 
         backgroundColor: theme.cardBg,
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        overflow: 'hidden'
       }}>
-        <h3 style={{ 
-          marginTop: 0, 
-          marginBottom: '16px', 
-          fontSize: '16px', 
-          fontWeight: '600', 
-          color: theme.text 
-        }}>
-          Filters
-        </h3>
-        <form onSubmit={handleApplyFilter}>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          style={{
+            width: '100%',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = theme.hoverBg;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>🔍</span>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: '18px', 
+              fontWeight: '600', 
+              color: theme.text 
+            }}>
+              Filters
+            </h3>
+          </div>
+          <span style={{ 
+            fontSize: '20px',
+            transform: showFilters ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.3s ease'
+          }}>
+            ▼
+          </span>
+        </button>
+        {showFilters && (
+          <div style={{ padding: '0 20px 20px 20px' }}>
+            <form onSubmit={handleApplyFilter}>
           {/* Row 1: Basic Filters */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1257,6 +1513,8 @@ export default function Network() {
             </button>
           </div>
         </form>
+          </div>
+        )}
       </section>
 
       {/* Main Content: Web Visualization + Analytics Sidebar */}
@@ -1264,20 +1522,20 @@ export default function Network() {
         {/* Web Visualization */}
         <div style={{ flex: 1, position: 'relative' }}>
           <div style={{ 
-            border: `1px solid ${theme.border}`, 
+            border: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)'}`, 
             borderRadius: '12px', 
-            backgroundColor: theme.cardBg,
+            backgroundColor: darkMode ? '#0a0a0a' : '#1a1a1a',
             padding: '24px',
             minHeight: '640px',
             position: 'relative',
             overflow: 'hidden',
-            boxShadow: theme.shadow,
+            boxShadow: darkMode ? '0 0 30px rgba(76, 175, 80, 0.2), inset 0 0 60px rgba(76, 175, 80, 0.05)' : '0 0 20px rgba(76, 175, 80, 0.15)',
             transition: 'all 0.3s ease'
           }}>
             <div style={{ 
               marginBottom: '16px',
               paddingBottom: '16px',
-              borderBottom: `1px solid ${theme.borderLight}`,
+              borderBottom: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.15)'}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -1298,7 +1556,7 @@ export default function Network() {
                   color: theme.textSecondary,
                   transition: 'color 0.3s ease'
                 }}>
-                  Drag nodes to explore • Click to focus • Blue: same skill • Purple: same wallet • Green: matches
+                  Drag background to pan • Scroll to zoom • Drag nodes to explore • Click to focus • Blue: same skill • Purple: same wallet • Green: matches
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -1348,6 +1606,15 @@ export default function Network() {
                 zIndex: 0
               }}
             >
+              <defs>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
               {/* Draw Arkiv-based connections */}
               {filteredConnections.map((conn, idx) => {
                 let strokeColor = 'rgba(0, 102, 204, 0.15)';
@@ -1358,18 +1625,20 @@ export default function Network() {
                 if (conn.type === 'match') {
                   // Potential mentorship matches (ask + offer) - use score for opacity/thickness
                   const score = conn.score || 0;
-                  opacity = Math.max(0.2, score); // Opacity based on score
-                  strokeWidth = 1 + (score * 2); // Thickness based on score (1-3px)
-                  strokeColor = `rgba(76, 175, 80, ${opacity})`;
+                  opacity = Math.max(0.3, score); // Opacity based on score
+                  strokeWidth = 1.5 + (score * 2); // Thickness based on score (1.5-3.5px)
+                  strokeColor = `rgba(76, 175, 80, ${Math.min(0.8, opacity + 0.2)})`;
                   strokeDasharray = score > 0.7 ? 'none' : '5,5'; // Solid for high scores, dashed for low
                 } else if (conn.type === 'wallet') {
-                  // Same wallet (same contributor) - purple
-                  strokeColor = 'rgba(156, 39, 176, 0.25)';
-                  strokeWidth = 2;
-                } else {
-                  // Same skill - blue
-                  strokeColor = 'rgba(0, 102, 204, 0.2)';
+                  // Same wallet (same contributor) - green
+                  strokeColor = 'rgba(76, 175, 80, 0.3)';
                   strokeWidth = 1.5;
+                  strokeDasharray = '3,3';
+                } else {
+                  // Same skill - green
+                  strokeColor = 'rgba(76, 175, 80, 0.4)';
+                  strokeWidth = 1.5;
+                  strokeDasharray = '5,5';
                 }
                 
                 // Dim edges not connected to focused node
@@ -1377,22 +1646,103 @@ export default function Network() {
                   opacity = 0.1;
                 }
                 
+                // Apply pan and zoom to connection coordinates
+                const fromX = conn.fromPos.x * zoom + panOffset.x;
+                const fromY = conn.fromPos.y * zoom + panOffset.y;
+                const toX = conn.toPos.x * zoom + panOffset.x;
+                const toY = conn.toPos.y * zoom + panOffset.y;
+                
                 return (
                   <line
                     key={`${conn.from}-${conn.to}-${idx}`}
-                    x1={conn.fromPos.x}
-                    y1={conn.fromPos.y}
-                    x2={conn.toPos.x}
-                    y2={conn.toPos.y}
+                    x1={fromX}
+                    y1={fromY}
+                    x2={toX}
+                    y2={toY}
                     stroke={strokeColor}
                     strokeWidth={strokeWidth}
                     strokeDasharray={strokeDasharray}
                     opacity={opacity}
+                    filter={conn.type === 'match' ? 'url(#glow)' : 'none'}
                   />
                 );
               })}
             </svg>
             
+            {/* Zoom Controls */}
+            <div style={{
+              position: 'absolute',
+              top: '90px',
+              right: '24px',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              backgroundColor: theme.cardBg,
+              padding: '8px',
+              borderRadius: '8px',
+              border: `1px solid ${theme.border}`,
+              boxShadow: theme.shadow
+            }}>
+              <button
+                onClick={() => setZoom(prev => Math.min(2, prev + 0.1))}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '14px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer'
+                }}
+                title="Zoom in"
+              >
+                +
+              </button>
+              <div style={{
+                padding: '4px 8px',
+                fontSize: '12px',
+                textAlign: 'center',
+                color: theme.textSecondary
+              }}>
+                {Math.round(zoom * 100)}%
+              </div>
+              <button
+                onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '14px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer'
+                }}
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                onClick={() => {
+                  setPanOffset({ x: 0, y: 0 });
+                  setZoom(1);
+                }}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  backgroundColor: theme.hoverBg,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: '4px',
+                  color: theme.text,
+                  cursor: 'pointer',
+                  marginTop: '4px'
+                }}
+                title="Reset view"
+              >
+                Reset
+              </button>
+            </div>
+
             {/* Render nodes */}
             <div 
               data-container
@@ -1401,16 +1751,23 @@ export default function Network() {
                 width: '100%', 
                 height: '600px', 
                 marginTop: '16px',
-                cursor: draggingNode ? 'grabbing' : 'default'
+                cursor: panning ? 'grabbing' : (draggingNode ? 'grabbing' : 'grab'),
+                overflow: 'hidden'
               }}
               onMouseDown={(e) => {
-                // Only clear focus if clicking directly on container (not on a node)
-                if (e.target === e.currentTarget) {
-                  setFocusedNode(null);
+                // Start panning if clicking on container background
+                if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+                  handlePanStart(e);
+                } else {
+                  // Only clear focus if clicking directly on container (not on a node)
+                  if (e.target === e.currentTarget) {
+                    setFocusedNode(null);
+                  }
                 }
               }}
               onMouseMove={handleDrag}
               onMouseUp={handleDragEnd}
+              onWheel={handleWheel}
             >
               {displayedNodes.slice(0, 50).map((node) => {
                 const nodePos = getNodePosition(node.id, node.x, node.y);
@@ -1418,41 +1775,59 @@ export default function Network() {
                 const nodeOpacity = getNodeOpacity(node.id);
                 const isFocused = focusedNode === node.id;
                 
+                // Apply pan and zoom transforms
+                const transformedX = nodePos.x * zoom + panOffset.x;
+                const transformedY = nodePos.y * zoom + panOffset.y;
+                
                 return (
                   <div
                     key={node.id}
                     style={{
                       position: 'absolute',
-                      left: `${nodePos.x}px`,
-                      top: `${nodePos.y}px`,
-                      transform: 'translate(-50%, -50%)',
-                      width: '160px',
-                      padding: '12px',
-                      backgroundColor: darkMode 
-                        ? (node.type === 'ask' ? '#3a2525' : '#253a25')
-                        : (node.type === 'ask' ? '#fff5f5' : '#f0f9f4'),
-                      border: `2px solid ${isFocused ? '#0066cc' : (node.type === 'ask' ? '#ef5350' : '#4caf50')}`,
-                      borderRadius: '10px',
+                      left: `${transformedX}px`,
+                      top: `${transformedY}px`,
+                      transform: `translate(-50%, -50%) scale(${zoom})`,
+                      width: '120px',
+                      height: '120px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: node.type === 'ask' 
+                        ? 'radial-gradient(circle, rgba(239, 83, 80, 0.3) 0%, rgba(186, 28, 28, 0.2) 100%)'
+                        : 'radial-gradient(circle, rgba(76, 175, 80, 0.4) 0%, rgba(46, 125, 50, 0.3) 100%)',
+                      border: `3px solid ${isFocused ? 'rgba(76, 175, 80, 1)' : (node.type === 'ask' ? 'rgba(239, 83, 80, 0.6)' : 'rgba(76, 175, 80, 0.8)')}`,
+                      borderRadius: '50%',
                       cursor: isDragging ? 'grabbing' : 'grab',
                       boxShadow: isFocused 
-                        ? (darkMode ? '0 0 20px rgba(0, 102, 204, 0.6)' : '0 0 20px rgba(0, 102, 204, 0.4)')
+                        ? '0 0 30px rgba(76, 175, 80, 0.8), 0 0 60px rgba(76, 175, 80, 0.4), inset 0 0 20px rgba(76, 175, 80, 0.2)'
                         : isDragging 
-                          ? (darkMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(0,0,0,0.25)')
-                          : (darkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.12)'),
+                          ? '0 0 25px rgba(76, 175, 80, 0.6), 0 0 50px rgba(76, 175, 80, 0.3)'
+                          : '0 0 15px rgba(76, 175, 80, 0.5), 0 0 30px rgba(76, 175, 80, 0.2), inset 0 0 15px rgba(76, 175, 80, 0.1)',
                       fontSize: '12px',
-                      transition: isDragging ? 'none' : 'all 0.2s ease',
+                      transition: isDragging ? 'none' : 'all 0.3s ease',
                       zIndex: isFocused ? 50 : (isDragging ? 100 : 1),
                       userSelect: 'none',
                       opacity: nodeOpacity,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFocusedNode(focusedNode === node.id ? null : node.id);
+                      // Only focus if we didn't drag (dragStartPos will be null if it was just a click)
+                      if (!draggingNode && dragStartPos) {
+                        // Check if mouse moved - if not, it's a click
+                        const dx = e.clientX - (dragStartPos?.x || 0);
+                        const dy = e.clientY - (dragStartPos?.y || 0);
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance < 5) {
+                          setFocusedNode(focusedNode === node.id ? null : node.id);
+                        }
+                      } else if (!draggingNode) {
+                        setFocusedNode(focusedNode === node.id ? null : node.id);
+                      }
                     }}
                     onMouseDown={(e) => {
-                      // Only start drag on right mouse button or if not clicking
                       if (e.button === 0) {
-                        // Left click - allow both drag and focus
+                        // Left click - prepare for potential drag
                         handleDragStart(e, node.id, nodePos.x, nodePos.y);
                       }
                     }}
@@ -1476,34 +1851,38 @@ export default function Network() {
                     }}
                   >
                   <div style={{ 
+                    fontSize: '20px',
+                    marginBottom: '4px',
+                    filter: 'drop-shadow(0 0 4px rgba(76, 175, 80, 0.8))'
+                  }}>
+                    🌱
+                  </div>
+                  <div style={{ 
                     fontWeight: '600', 
-                    marginBottom: '6px', 
-                    color: node.type === 'ask' ? '#d32f2f' : '#2e7d32',
-                    fontSize: '13px'
-                  }}>
-                    {node.type === 'ask' ? '🔴 Ask' : '🟢 Offer'}
-                  </div>
-                  <div style={{ 
                     marginBottom: '4px', 
-                    fontWeight: '500',
-                    color: theme.text,
-                    fontSize: '13px'
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                    textShadow: '0 0 8px rgba(76, 175, 80, 0.8)'
                   }}>
-                    {node.skill || 'Unknown'}
+                    {node.skill || (node.type === 'ask' ? 'Ask' : 'Offer')}
                   </div>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    color: theme.textSecondary, 
-                    marginBottom: '4px'
+                  <div style={{
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    fontSize: '10px',
+                    marginTop: '2px',
+                    textAlign: 'center',
+                    fontFamily: 'monospace'
                   }}>
                     {shortenWallet(node.wallet)}
                   </div>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    color: theme.textTertiary, 
-                    marginTop: '6px',
-                    paddingTop: '6px',
-                    borderTop: `1px solid ${theme.borderLight}`
+                  <div style={{
+                    color: 'rgba(76, 175, 80, 0.9)',
+                    fontSize: '10px',
+                    marginTop: '4px',
+                    textAlign: 'center',
+                    fontWeight: '500',
+                    textShadow: '0 0 4px rgba(76, 175, 80, 0.6)'
                   }}>
                     {formatTimeRemaining(node.createdAt, node.ttlSeconds)}
                   </div>
@@ -1829,34 +2208,1369 @@ export default function Network() {
         )}
       </div>
 
-      {/* Detailed Lists Below */}
-      <div style={{ marginTop: '32px' }}>
-        {displayedAsks.length > 0 && (
+      {/* Profile Matches Section - Collapsible */}
+      {profiles.length > 0 && (
+        <section style={{ 
+          marginBottom: '24px', 
+          border: `1px solid ${theme.border}`, 
+          borderRadius: '12px',
+          backgroundColor: theme.cardBg,
+          boxShadow: theme.shadow,
+          transition: 'all 0.3s ease',
+          overflow: 'hidden'
+        }}>
+          <button
+            onClick={() => setShowProfiles(!showProfiles)}
+            style={{
+              width: '100%',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme.hoverBg;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '28px' }}>👤</span>
+              <div style={{ textAlign: 'left' }}>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Profile Matches
+                </h2>
+                <p style={{ 
+                  margin: '4px 0 0 0',
+                  fontSize: '12px',
+                  color: theme.textSecondary,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Skills, reputation, and availability
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{
+                fontSize: '20px',
+                fontWeight: '700',
+                color: '#0066cc',
+                backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                minWidth: '40px',
+                textAlign: 'center'
+              }}>
+                {(() => {
+                  // Count unique wallets
+                  const uniqueWallets = new Set(profiles.map(p => p.wallet?.toLowerCase()).filter(Boolean));
+                  return uniqueWallets.size;
+                })()}
+              </span>
+              <span style={{ 
+                fontSize: '20px',
+                transform: showProfiles ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s ease'
+              }}>
+                ▼
+              </span>
+            </div>
+          </button>
+          {showProfiles && (
+            <div style={{ padding: '0 20px 20px 20px' }}>
+              <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+            {(() => {
+              // Deduplicate profiles by wallet address, keeping only the most recent one
+              const profileMap = new Map<string, any>();
+              profiles.forEach((profile) => {
+                const wallet = profile.wallet?.toLowerCase() || '';
+                if (!wallet) return;
+                
+                const existing = profileMap.get(wallet);
+                if (!existing) {
+                  profileMap.set(wallet, profile);
+                } else {
+                  // Keep the one with the most recent createdAt
+                  const existingTime = existing.createdAt ? new Date(existing.createdAt).getTime() : 0;
+                  const currentTime = profile.createdAt ? new Date(profile.createdAt).getTime() : 0;
+                  if (currentTime > existingTime) {
+                    profileMap.set(wallet, profile);
+                  }
+                }
+              });
+              
+              const uniqueProfiles = Array.from(profileMap.values());
+              
+              return uniqueProfiles.map((profile) => {
+                const isMe = userWallet && profile.wallet?.toLowerCase() === userWallet.toLowerCase();
+                
+                // Compute match score based on skill overlap with user (only if not "me")
+                const profileSkills = profile.skillsArray || (profile.skills ? profile.skills.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean) : []);
+                const skillOverlap = !isMe && userSkills.length > 0 
+                  ? profileSkills.filter((ps: string) => userSkills.some((us: string) => ps.includes(us) || us.includes(ps))).length
+                  : 0;
+                const matchScore = !isMe && userSkills.length > 0 
+                  ? Math.min(100, (skillOverlap / Math.max(userSkills.length, profileSkills.length)) * 100)
+                  : 0;
+              
+              return (
+                <div 
+                  key={profile.key} 
+                  style={{ 
+                    padding: '20px', 
+                    border: `1px solid ${theme.borderLight}`, 
+                    borderRadius: '8px', 
+                    backgroundColor: theme.hoverBg,
+                    transition: 'all 0.2s ease',
+                    borderLeft: `4px solid ${isMe ? '#0066cc' : matchScore > 50 ? '#4caf50' : matchScore > 25 ? '#ffa500' : theme.border}`
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = theme.shadowHover;
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.borderColor = theme.border;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = theme.borderLight;
+                  }}
+                >
+                  <div style={{ 
+                    marginBottom: '12px', 
+                    paddingBottom: '12px', 
+                    borderBottom: `1px solid ${theme.borderLight}`
+                  }}>
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '8px'
+                    }}>
+                      <strong style={{ 
+                        color: theme.text,
+                        fontSize: '16px',
+                        fontWeight: '600'
+                      }}>
+                        👤 {profile.displayName || 'Unknown'}
+                      </strong>
+                      {isMe ? (
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          color: '#0066cc',
+                          backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                          padding: '4px 8px',
+                          borderRadius: '4px'
+                        }}>
+                          me
+                        </span>
+                      ) : matchScore > 0 && (
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          color: matchScore > 50 ? '#4caf50' : matchScore > 25 ? '#ffa500' : theme.textSecondary,
+                          backgroundColor: matchScore > 50 ? (darkMode ? '#1a3a1a' : '#e8f5e9') : matchScore > 25 ? (darkMode ? '#3a2a1a' : '#fff3e0') : theme.hoverBg,
+                          padding: '4px 8px',
+                          borderRadius: '4px'
+                        }}>
+                          {Math.round(matchScore)}% match
+                        </span>
+                      )}
+                    </div>
+                    {profile.username && (
+                      <div style={{ 
+                        fontSize: '13px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        @{profile.username}
+                      </div>
+                    )}
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: theme.textTertiary,
+                      fontFamily: 'monospace'
+                    }}>
+                      {shortenWallet(profile.wallet)}
+                    </div>
+                  </div>
+                  
+                  {profile.bioShort && (
+                    <div style={{ 
+                      marginBottom: '12px', 
+                      color: theme.text,
+                      fontSize: '14px',
+                      lineHeight: '1.5'
+                    }}>
+                      {profile.bioShort}
+                    </div>
+                  )}
+                  
+                  {profileSkills.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: theme.textSecondary,
+                        marginBottom: '6px',
+                        fontWeight: '500'
+                      }}>
+                        Skills:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {profileSkills.slice(0, 5).map((skill: string, idx: number) => {
+                          const isMatch = userSkills.some((us: string) => skill.toLowerCase().includes(us) || us.includes(skill.toLowerCase()));
+                          return (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: '11px',
+                                padding: '4px 8px',
+                                backgroundColor: isMatch ? (darkMode ? '#1a3a1a' : '#e8f5e9') : theme.cardBg,
+                                color: isMatch ? '#4caf50' : theme.text,
+                                borderRadius: '4px',
+                                border: `1px solid ${isMatch ? '#4caf50' : theme.borderLight}`,
+                                fontWeight: isMatch ? '600' : 'normal'
+                              }}
+                            >
+                              {skill}
+                            </span>
+                          );
+                        })}
+                        {profileSkills.length > 5 && (
+                          <span style={{
+                            fontSize: '11px',
+                            color: theme.textSecondary
+                          }}>
+                            +{profileSkills.length - 5} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={{ 
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    marginBottom: '12px',
+                    fontSize: '12px',
+                    color: theme.textSecondary
+                  }}>
+                    {profile.seniority && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        {profile.seniority}
+                      </span>
+                    )}
+                    {profile.reputationScore !== undefined && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        Rep: {profile.reputationScore}
+                      </span>
+                    )}
+                    {profile.sessionsCompleted !== undefined && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        {profile.sessionsCompleted} sessions
+                      </span>
+                    )}
+                    {profile.avgRating !== undefined && profile.avgRating > 0 && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '4px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        ⭐ {profile.avgRating.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {profile.mentorRoles && profile.mentorRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        Mentor Roles:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {profile.mentorRoles.slice(0, 3).map((role: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 6px',
+                              backgroundColor: darkMode ? '#2a3a2a' : '#e8f5e9',
+                              color: '#4caf50',
+                              borderRadius: '3px'
+                            }}
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {profile.learnerRoles && profile.learnerRoles.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: theme.textSecondary,
+                        marginBottom: '4px'
+                      }}>
+                        Learner Roles:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {profile.learnerRoles.slice(0, 3).map((role: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 6px',
+                              backgroundColor: darkMode ? '#2a2a3a' : '#e3f2fd',
+                              color: '#2196f3',
+                              borderRadius: '3px'
+                            }}
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}`, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {userWallet && userWallet.toLowerCase() !== profile.wallet.toLowerCase() && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRequestMeetingModal({ open: true, profile });
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          backgroundColor: '#0066cc',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          flex: 1,
+                          minWidth: '120px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#0052a3';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#0066cc';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        📅 Request Meeting
+                      </button>
+                    )}
+                    {profile.txHash && (
+                      <a
+                        href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${profile.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ 
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '13px',
+                          color: '#0066cc',
+                          textDecoration: 'none',
+                          fontWeight: '500',
+                          padding: '8px 12px',
+                          backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                          borderRadius: '6px',
+                          border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(profile.txHash!);
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = darkMode ? '#2a5a7a' : '#d0e7ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#3a7a9a' : '#80c7ff';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = darkMode ? '#1a3a5a' : '#e7f3ff';
+                          e.currentTarget.style.borderColor = darkMode ? '#2a5a7a' : '#b3d9ff';
+                        }}
+                        title="Click to open in explorer (copies hash to clipboard)">
+                        View on Arkiv Explorer ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+              });
+            })()}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Request Meeting Modal */}
+      {requestMeetingModal.open && requestMeetingModal.profile && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setRequestMeetingModal({ open: false, profile: null });
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: theme.cardBg,
+              borderRadius: '12px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${theme.border}`
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '24px' }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '24px',
+                fontWeight: '600',
+                color: theme.text,
+                marginBottom: '8px'
+              }}>
+                Request Meeting
+              </h2>
+              <p style={{
+                margin: 0,
+                fontSize: '14px',
+                color: theme.textSecondary
+              }}>
+                Schedule a mentorship session with {requestMeetingModal.profile.displayName || shortenWallet(requestMeetingModal.profile.wallet)}
+              </p>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!userWallet) {
+                  alert('Please connect your wallet first');
+                  return;
+                }
+
+                const formData = new FormData(e.currentTarget);
+                const date = formData.get('date') as string;
+                const time = formData.get('time') as string;
+                const skill = formData.get('skill') as string;
+                const duration = formData.get('duration') as string;
+                const notes = formData.get('notes') as string;
+
+                if (!date || !time || !skill) {
+                  alert('Please fill in date, time, and skill');
+                  return;
+                }
+
+                // Combine date and time into ISO string
+                const sessionDate = new Date(`${date}T${time}`).toISOString();
+
+                // Determine mentor/learner: if target has mentor roles, they're mentor; if user has mentor roles, they're mentor; otherwise default to target as mentor
+                const targetHasMentorRoles = requestMeetingModal.profile.mentorRoles && requestMeetingModal.profile.mentorRoles.length > 0;
+                const userHasMentorRoles = userProfile?.mentorRoles && userProfile.mentorRoles.length > 0;
+                
+                let mentorWallet: string;
+                let learnerWallet: string;
+                
+                // Normalize wallet addresses for comparison
+                const targetWallet = requestMeetingModal.profile.wallet?.toLowerCase() || '';
+                const normalizedUserWallet = userWallet?.toLowerCase() || '';
+                
+                // Validate that user and target are different wallets
+                if (targetWallet === normalizedUserWallet) {
+                  alert('Cannot request a meeting with yourself. Please select a different profile.');
+                  return;
+                }
+                
+                if (targetHasMentorRoles && !userHasMentorRoles) {
+                  // Target is mentor, user is learner
+                  mentorWallet = targetWallet;
+                  learnerWallet = normalizedUserWallet;
+                } else if (userHasMentorRoles && !targetHasMentorRoles) {
+                  // User is mentor, target is learner
+                  mentorWallet = normalizedUserWallet;
+                  learnerWallet = targetWallet;
+                } else {
+                  // Default: target is mentor (they're being requested)
+                  mentorWallet = targetWallet;
+                  learnerWallet = normalizedUserWallet;
+                }
+
+                setSubmittingMeeting(true);
+                try {
+                  const res = await fetch('/api/me', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'createSession',
+                      wallet: userWallet,
+                      mentorWallet,
+                      learnerWallet,
+                      skill,
+                      sessionDate,
+                      duration: duration || '60',
+                      notes: notes || '',
+                    }),
+                  });
+
+                  const data = await res.json();
+                  if (!res.ok) {
+                    throw new Error(data.error || 'Failed to create session');
+                  }
+
+                  alert(`Meeting requested successfully! Transaction: ${data.txHash ? shortenHash(data.txHash) : 'pending'}`);
+                  setRequestMeetingModal({ open: false, profile: null });
+                  
+                  // Refresh network data to show new session
+                  fetchNetwork();
+                } catch (err: any) {
+                  console.error('Error creating session:', err);
+                  alert(`Error: ${err.message || 'Failed to request meeting'}`);
+                } finally {
+                  setSubmittingMeeting(false);
+                }
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Skill *</span>
+                  <input
+                    type="text"
+                    name="skill"
+                    required
+                    defaultValue={requestMeetingModal.profile.skillsArray?.[0] || requestMeetingModal.profile.skills?.split(',')[0] || ''}
+                    placeholder="e.g. solidity, react, design"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Date *</span>
+                    <input
+                      type="date"
+                      name="date"
+                      required
+                      min={new Date().toISOString().split('T')[0]}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                        transition: 'all 0.2s',
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                    />
+                  </label>
+
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Time *</span>
+                    <input
+                      type="time"
+                      name="time"
+                      required
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                        transition: 'all 0.2s',
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                    />
+                  </label>
+                </div>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Duration (minutes)</span>
+                  <input
+                    type="number"
+                    name="duration"
+                    defaultValue="60"
+                    min="15"
+                    max="240"
+                    step="15"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Notes (optional)</span>
+                  <textarea
+                    name="notes"
+                    rows={4}
+                    placeholder="Any additional details about the session..."
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRequestMeetingModal({ open: false, profile: null })}
+                    disabled={submittingMeeting}
+                    style={{
+                      flex: 1,
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      backgroundColor: theme.hoverBg,
+                      color: theme.text,
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: '6px',
+                      cursor: submittingMeeting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: submittingMeeting ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e0e0e0';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = theme.hoverBg;
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingMeeting}
+                    style={{
+                      flex: 1,
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      backgroundColor: submittingMeeting ? '#999' : '#0066cc',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: submittingMeeting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: submittingMeeting ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = '#0052a3';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = '#0066cc';
+                      }
+                    }}
+                  >
+                    {submittingMeeting ? 'Requesting...' : 'Request Meeting'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming Meetings Section */}
+      {(() => {
+        // Filter sessions to show only upcoming ones (pending, scheduled, or in-progress, with sessionDate in the future)
+        // Also show cancelled sessions so users can see what was rejected
+        const now = Date.now();
+        const upcomingSessions = sessions.filter((session) => {
+          if (session.status === 'completed') return false;
+          // Show cancelled sessions if they're recent (within last 7 days) so users can see rejections
+          if (session.status === 'cancelled') {
+            if (!session.sessionDate) return false;
+            const sessionTime = new Date(session.sessionDate).getTime();
+            const daysSinceCancelled = (now - sessionTime) / (1000 * 60 * 60 * 24);
+            return daysSinceCancelled <= 7; // Show cancelled sessions from last 7 days
+          }
+          if (!session.sessionDate) return false;
+          const sessionTime = new Date(session.sessionDate).getTime();
+          return sessionTime >= now;
+        }).sort((a, b) => {
+          // Sort by status (in-progress first, then pending, then cancelled, then scheduled), then by sessionDate (earliest first)
+          const statusOrder: Record<string, number> = { 'in-progress': 0, 'pending': 1, 'cancelled': 2, 'scheduled': 3 };
+          const aOrder = statusOrder[a.status] ?? 4;
+          const bOrder = statusOrder[b.status] ?? 4;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          const aTime = new Date(a.sessionDate).getTime();
+          const bTime = new Date(b.sessionDate).getTime();
+          return aTime - bTime;
+        });
+
+        if (upcomingSessions.length === 0) return null;
+
+        return (
           <section style={{ 
-            marginBottom: '32px', 
-            padding: '28px', 
+            marginBottom: '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
             boxShadow: theme.shadow,
-            transition: 'all 0.3s ease'
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
           }}>
-            <div style={{ 
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: `2px solid ${theme.borderLight}`
-            }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '22px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Open Asks ({displayedAsks.length})
-              </h2>
-            </div>
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <button
+              onClick={() => setShowMeetings(!showMeetings)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>📅</span>
+                <div style={{ textAlign: 'left' }}>
+                  <h2 style={{ 
+                    margin: 0,
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: theme.text,
+                    transition: 'color 0.3s ease'
+                  }}>
+                    Upcoming Meetings
+                  </h2>
+                  <p style={{ 
+                    margin: '4px 0 0 0',
+                    fontSize: '12px',
+                    color: theme.textSecondary,
+                    transition: 'color 0.3s ease'
+                  }}>
+                    Scheduled and in-progress sessions
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#0066cc',
+                  backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {upcomingSessions.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showMeetings ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showMeetings && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
+              {upcomingSessions.map((session) => {
+                const sessionTime = new Date(session.sessionDate);
+                const isToday = sessionTime.toDateString() === new Date().toDateString();
+                const isInProgress = session.status === 'in-progress';
+                const isPending = session.status === 'pending';
+                const isCancelled = session.status === 'cancelled';
+                const timeUntil = sessionTime.getTime() - Date.now();
+                const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60));
+                const minutesUntil = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
+                
+                // Find profile info for mentor and learner
+                const mentorProfile = profiles.find(p => p.wallet.toLowerCase() === session.mentorWallet.toLowerCase());
+                const learnerProfile = profiles.find(p => p.wallet.toLowerCase() === session.learnerWallet.toLowerCase());
+                
+                // Check if current user can confirm/reject
+                const isMentor = userWallet.toLowerCase() === session.mentorWallet.toLowerCase();
+                const isLearner = userWallet.toLowerCase() === session.learnerWallet.toLowerCase();
+                const canConfirm = isPending && (isMentor || isLearner);
+                const userConfirmed = isMentor ? session.mentorConfirmed : (isLearner ? session.learnerConfirmed : false);
+                const otherConfirmed = isMentor ? session.learnerConfirmed : (isLearner ? session.mentorConfirmed : false);
+
+                return (
+                  <div 
+                    key={session.key} 
+                    style={{ 
+                      padding: '20px', 
+                      border: `1px solid ${theme.borderLight}`, 
+                      borderRadius: '8px', 
+                      backgroundColor: isInProgress ? (darkMode ? '#2a3a2a' : '#e8f5e9') : isPending ? (darkMode ? '#3a2a1a' : '#fff3e0') : isCancelled ? (darkMode ? '#3a2a2a' : '#ffebee') : theme.hoverBg,
+                      transition: 'all 0.2s ease',
+                      borderLeft: `4px solid ${isInProgress ? '#4caf50' : isPending ? '#ffa500' : isCancelled ? '#ef5350' : isToday ? '#ffa500' : '#0066cc'}`
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = theme.shadowHover;
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.borderColor = theme.border;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.borderColor = theme.borderLight;
+                    }}
+                  >
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '12px',
+                      paddingBottom: '12px',
+                      borderBottom: `1px solid ${theme.borderLight}`
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '8px'
+                        }}>
+                          <strong style={{ 
+                            color: theme.text,
+                            fontSize: '16px',
+                            fontWeight: '600'
+                          }}>
+                            📅 {session.skill || 'Session'}
+                          </strong>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            color: isInProgress ? '#4caf50' : isPending ? '#ffa500' : isCancelled ? '#ef5350' : isToday ? '#ffa500' : theme.textSecondary,
+                            backgroundColor: isInProgress ? (darkMode ? '#1a3a1a' : '#e8f5e9') : isPending ? (darkMode ? '#3a2a1a' : '#fff3e0') : isCancelled ? (darkMode ? '#4a2a2a' : '#ffebee') : isToday ? (darkMode ? '#3a2a1a' : '#fff3e0') : theme.hoverBg,
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase'
+                          }}>
+                            {isInProgress ? '🔴 In Progress' : isPending ? '⏳ Pending' : isCancelled ? '❌ Cancelled' : session.status}
+                          </span>
+                          {isPending && (
+                            <span style={{
+                              fontSize: '10px',
+                              color: theme.textTertiary,
+                              marginLeft: '8px'
+                            }}>
+                              {userConfirmed ? '✓ You confirmed' : otherConfirmed ? '⏳ Waiting for you' : '⏳ Awaiting confirmation'}
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span style={{
+                              fontSize: '10px',
+                              color: '#ef5350',
+                              marginLeft: '8px'
+                            }}>
+                              This session was rejected
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ 
+                          fontSize: '18px',
+                          fontWeight: '600',
+                          color: theme.text,
+                          marginBottom: '4px'
+                        }}>
+                          {sessionTime.toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                        </div>
+                        <div style={{ 
+                          fontSize: '16px',
+                          color: theme.textSecondary,
+                          marginBottom: '8px'
+                        }}>
+                          {sessionTime.toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit',
+                            hour12: true 
+                          })}
+                          {session.duration && (
+                            <span style={{ marginLeft: '8px', fontSize: '14px' }}>
+                              • {session.duration} min
+                            </span>
+                          )}
+                        </div>
+                        {timeUntil > 0 && !isInProgress && (
+                          <div style={{ 
+                            fontSize: '13px',
+                            color: isToday ? '#ffa500' : theme.textTertiary,
+                            fontWeight: isToday ? '600' : 'normal'
+                          }}>
+                            {hoursUntil > 0 ? `${hoursUntil}h ${minutesUntil}m` : `${minutesUntil}m`} until start
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ 
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '16px',
+                      marginBottom: '12px'
+                    }}>
+                      <div>
+                        <div style={{ 
+                          fontSize: '12px',
+                          color: theme.textSecondary,
+                          marginBottom: '4px',
+                          fontWeight: '500'
+                        }}>
+                          Mentor:
+                        </div>
+                        <div style={{ 
+                          fontSize: '14px',
+                          color: theme.text,
+                          fontWeight: '500'
+                        }}>
+                          {mentorProfile?.displayName || shortenWallet(session.mentorWallet)}
+                        </div>
+                        {mentorProfile?.username && (
+                          <div style={{ 
+                            fontSize: '12px',
+                            color: theme.textTertiary
+                          }}>
+                            @{mentorProfile.username}
+                          </div>
+                        )}
+                        <div style={{ 
+                          fontSize: '11px',
+                          color: theme.textTertiary,
+                          fontFamily: 'monospace',
+                          marginTop: '2px'
+                        }}>
+                          {shortenWallet(session.mentorWallet)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ 
+                          fontSize: '12px',
+                          color: theme.textSecondary,
+                          marginBottom: '4px',
+                          fontWeight: '500'
+                        }}>
+                          Learner:
+                        </div>
+                        <div style={{ 
+                          fontSize: '14px',
+                          color: theme.text,
+                          fontWeight: '500'
+                        }}>
+                          {learnerProfile?.displayName || shortenWallet(session.learnerWallet)}
+                        </div>
+                        {learnerProfile?.username && (
+                          <div style={{ 
+                            fontSize: '12px',
+                            color: theme.textTertiary
+                          }}>
+                            @{learnerProfile.username}
+                          </div>
+                        )}
+                        <div style={{ 
+                          fontSize: '11px',
+                          color: theme.textTertiary,
+                          fontFamily: 'monospace',
+                          marginTop: '2px'
+                        }}>
+                          {shortenWallet(session.learnerWallet)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {session.notes && (
+                      <div style={{ 
+                        marginBottom: '12px',
+                        padding: '12px',
+                        backgroundColor: theme.cardBg,
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.borderLight}`
+                      }}>
+                        <div style={{ 
+                          fontSize: '12px',
+                          color: theme.textSecondary,
+                          marginBottom: '4px',
+                          fontWeight: '500'
+                        }}>
+                          Notes:
+                        </div>
+                        <div style={{ 
+                          fontSize: '14px',
+                          color: theme.text,
+                          lineHeight: '1.5'
+                        }}>
+                          {session.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {canConfirm && !userConfirmed && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}`, display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={async () => {
+                            if (!userWallet) {
+                              alert('Please connect your wallet first');
+                              return;
+                            }
+                            try {
+                              const res = await fetch('/api/me', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  action: 'confirmSession',
+                                  wallet: userWallet,
+                                  sessionKey: session.key,
+                                  mentorWallet: session.mentorWallet,
+                                  learnerWallet: session.learnerWallet,
+                                  spaceId: session.spaceId,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) {
+                                throw new Error(data.error || 'Failed to confirm session');
+                              }
+                              alert('Session confirmed!');
+                              fetchNetwork();
+                            } catch (err: any) {
+                              console.error('Error confirming session:', err);
+                              alert(`Error: ${err.message || 'Failed to confirm session'}`);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px 16px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            backgroundColor: '#4caf50',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#45a049';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#4caf50';
+                          }}
+                        >
+                          ✓ Confirm
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!userWallet) {
+                              alert('Please connect your wallet first');
+                              return;
+                            }
+                            if (!confirm('Are you sure you want to reject this meeting request?')) {
+                              return;
+                            }
+                            try {
+                              const res = await fetch('/api/me', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  action: 'rejectSession',
+                                  wallet: userWallet,
+                                  sessionKey: session.key,
+                                  mentorWallet: session.mentorWallet,
+                                  learnerWallet: session.learnerWallet,
+                                  spaceId: session.spaceId,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok) {
+                                throw new Error(data.error || 'Failed to reject session');
+                              }
+                              alert('Session rejected');
+                              fetchNetwork();
+                            } catch (err: any) {
+                              console.error('Error rejecting session:', err);
+                              alert(`Error: ${err.message || 'Failed to reject session'}`);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px 16px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            backgroundColor: theme.hoverBg,
+                            color: theme.text,
+                            border: `1px solid ${theme.border}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e0e0e0';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = theme.hoverBg;
+                          }}
+                        >
+                          ✗ Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Jitsi Join Button - Show when session is scheduled and has Jitsi link */}
+                    {session.status === 'scheduled' && session.videoProvider === 'jitsi' && session.videoJoinUrl && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                        <a
+                          href={session.videoJoinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '12px 20px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            backgroundColor: '#4caf50',
+                            color: '#ffffff',
+                            textDecoration: 'none',
+                            borderRadius: '8px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 4px rgba(76, 175, 80, 0.3)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#45a049';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(76, 175, 80, 0.4)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#4caf50';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(76, 175, 80, 0.3)';
+                          }}
+                        >
+                          🎥 Join Video Call
+                        </a>
+                      </div>
+                    )}
+
+                    {session.txHash && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                        <a
+                          href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${session.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '13px',
+                            color: '#0066cc',
+                            textDecoration: 'none',
+                            fontWeight: '500',
+                            padding: '6px 12px',
+                            backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                            borderRadius: '6px',
+                            border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyToClipboard(session.txHash!);
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = darkMode ? '#2a5a7a' : '#d0e7ff';
+                            e.currentTarget.style.borderColor = darkMode ? '#3a7a9a' : '#80c7ff';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = darkMode ? '#1a3a5a' : '#e7f3ff';
+                            e.currentTarget.style.borderColor = darkMode ? '#2a5a7a' : '#b3d9ff';
+                          }}
+                          title="Click to open in explorer (copies hash to clipboard)">
+                          View on Arkiv Explorer ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+                </div>
+              </div>
+            )}
+          </section>
+        );
+      })()}
+
+      {/* Detailed Lists Below - Collapsible */}
+      <div style={{ marginTop: '24px' }}>
+        {displayedAsks.length > 0 && (
+          <section style={{ 
+            marginBottom: '24px', 
+            border: `1px solid ${theme.border}`, 
+            borderRadius: '12px',
+            backgroundColor: theme.cardBg,
+            boxShadow: theme.shadow,
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
+          }}>
+            <button
+              onClick={() => setShowAsks(!showAsks)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>❓</span>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Open Asks
+                </h2>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#ef5350',
+                  backgroundColor: darkMode ? '#4a2525' : '#ffebee',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {displayedAsks.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showAsks ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showAsks && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
               {displayedAsks.map((ask) => (
                 <div 
                   key={ask.key} 
@@ -1956,36 +3670,79 @@ export default function Network() {
                   )}
                 </div>
               ))}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
         {displayedOffers.length > 0 && (
           <section style={{ 
-            marginBottom: '32px', 
-            padding: '28px', 
+            marginBottom: '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
             boxShadow: theme.shadow,
-            transition: 'all 0.3s ease'
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
           }}>
-            <div style={{ 
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: `2px solid ${theme.borderLight}`
-            }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '22px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Active Offers ({displayedOffers.length})
-              </h2>
-            </div>
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <button
+              onClick={() => setShowOffers(!showOffers)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>💎</span>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Active Offers
+                </h2>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#4caf50',
+                  backgroundColor: darkMode ? '#1a3a1a' : '#e8f5e9',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {displayedOffers.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showOffers ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showOffers && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
               {displayedOffers.map((offer) => (
                 <div 
                   key={offer.key} 
@@ -2092,7 +3849,9 @@ export default function Network() {
                   )}
                 </div>
               ))}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </div>
