@@ -120,7 +120,14 @@ export default function Network() {
   const [showAnalytics, setShowAnalytics] = useState(true);
   const [requestMeetingModal, setRequestMeetingModal] = useState<{ open: boolean; profile: any | null }>({ open: false, profile: null });
   const [submittingMeeting, setSubmittingMeeting] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  // Initialize dark mode from localStorage immediately to avoid flash
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [showProfiles, setShowProfiles] = useState(false);
   const [showMeetings, setShowMeetings] = useState(false);
@@ -319,11 +326,13 @@ export default function Network() {
     return () => clearInterval(interval);
   }, []);
 
-  // Set body background to match theme
+  // Set body background to match theme and persist dark mode
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? '#1a1a1a' : '#f8f9fa';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
+    // Persist dark mode preference
+    localStorage.setItem('darkMode', darkMode.toString());
     return () => {
       document.body.style.backgroundColor = '';
       document.body.style.margin = '';

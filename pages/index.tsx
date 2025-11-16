@@ -4,7 +4,14 @@ import { connectWallet } from '../src/wallet';
 
 export default function Home() {
   const router = useRouter();
-  const [darkMode, setDarkMode] = useState(false);
+  // Initialize dark mode from localStorage immediately to avoid flash
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [connecting, setConnecting] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +55,13 @@ export default function Home() {
     }
   };
 
-  // Set body background to match theme
+  // Set body background to match theme and persist dark mode
   useEffect(() => {
     document.body.style.backgroundColor = darkMode ? '#1a1a1a' : '#ffffff';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
+    // Persist dark mode preference
+    localStorage.setItem('darkMode', darkMode.toString());
     return () => {
       document.body.style.backgroundColor = '';
       document.body.style.margin = '';
