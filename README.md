@@ -5,7 +5,7 @@ We are tracking our developer experience with Arkiv in our [runbook](./docs/runb
 
 # Overview
 MentorGraph is an on-chain, p2p mentorship and trust-graph layer built on Arkiv.
-Users create a wallet-owned profile, publish Asks (what they want help with) and Offers (how they can help), and explore a dynamic network graph to discover aligned mentors, mentees, and collaborators.
+Users create a wallet-owned profile, publish Asks (what they want help with) and Offers (how they can help), explore a dynamic network graph to discover aligned mentors, mentees, and collaborators, and request meetings with each other for learning sessions.
 Arkiv is the core data layer: profiles, asks, offers, and graph edges are stored as Arkiv entities. The app demonstrates how Arkiv can power real-time, low-cost, composable social data graphs.
 
 # Live Demo
@@ -25,6 +25,13 @@ We aim to build p2p tools for mentorship, knowledge exchange, learning, and grow
 - Graph explorer filters based on skill tags, availability, location, ask/offer type
 - Cross-entity filtering to match mentors/mentees
 - Querying profiles + asks/offers in a single flow
+### Booking & Sessions
+- Request meetings with other users from the network graph
+- Two-way confirmation system (both mentor and learner must confirm)
+- Automatic Jitsi video call link generation upon confirmation
+- Session status tracking (pending, scheduled, in-progress, completed, cancelled)
+- Sessions expire automatically after session end time
+- Upcoming meetings displayed on dashboard
 ### Subscriptions (WIP)
 - Live updates when new Asks/Offers are posted
 - Real-time graph exploration without refresh
