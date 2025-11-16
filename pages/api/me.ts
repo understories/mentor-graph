@@ -1,7 +1,7 @@
 import { getProfileByWallet, createUserProfile, updateUserProfile } from "../../src/arkiv/profiles"
 import { listAsksForWallet, createAsk } from "../../src/arkiv/asks"
 import { listOffersForWallet, createOffer } from "../../src/arkiv/offers"
-import { listSessionsForWallet } from "../../src/arkiv/sessions"
+import { listSessionsForWallet, createSession } from "../../src/arkiv/sessions"
 import { listFeedbackForWallet } from "../../src/arkiv/feedback"
 import { CURRENT_WALLET, getPrivateKey } from "../../src/config"
 
@@ -196,6 +196,21 @@ export default async function handler(req: any, res: any) {
           availabilityWindow,
           privateKey: getPrivateKey(),
           expiresIn: expiresIn ? parseInt(expiresIn, 10) : undefined,
+        });
+        res.json({ ok: true, key, txHash });
+      } else if (action === 'createSession') {
+        const { mentorWallet, learnerWallet, skill, sessionDate, duration, notes } = req.body;
+        if (!mentorWallet || !learnerWallet || !skill || !sessionDate) {
+          return res.status(400).json({ ok: false, error: 'mentorWallet, learnerWallet, skill, and sessionDate are required' });
+        }
+        const { key, txHash } = await createSession({
+          mentorWallet,
+          learnerWallet,
+          skill,
+          sessionDate,
+          duration: duration ? parseInt(duration, 10) : undefined,
+          notes: notes || undefined,
+          privateKey: getPrivateKey(),
         });
         res.json({ ok: true, key, txHash });
       } else {

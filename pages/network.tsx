@@ -114,7 +114,10 @@ export default function Network() {
   const [ttlFilter, setTtlFilter] = useState<string>(''); // 'active' | 'expiring' | 'all'
   const [userSkills, setUserSkills] = useState<string[]>([]);
   const [userWallet, setUserWallet] = useState<string>('');
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [showAnalytics, setShowAnalytics] = useState(true);
+  const [requestMeetingModal, setRequestMeetingModal] = useState<{ open: boolean; profile: any | null }>({ open: false, profile: null });
+  const [submittingMeeting, setSubmittingMeeting] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [viewMode, setViewMode] = useState<'matches' | 'skills' | 'wallets' | 'all'>('all');
   const [focusedNode, setFocusedNode] = useState<string | null>(null);
@@ -136,6 +139,9 @@ export default function Network() {
         }
         if (data.wallet) {
           setUserWallet(data.wallet);
+        }
+        if (data.profile) {
+          setUserProfile(data.profile);
         }
       })
       .catch(err => console.error('Error fetching user profile:', err));
@@ -2265,8 +2271,39 @@ export default function Network() {
                     </div>
                   )}
                   
-                  {profile.txHash && (
-                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}` }}>
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.borderLight}`, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {userWallet && userWallet.toLowerCase() !== profile.wallet.toLowerCase() && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRequestMeetingModal({ open: true, profile });
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          backgroundColor: '#0066cc',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          flex: 1,
+                          minWidth: '120px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#0052a3';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#0066cc';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        📅 Request Meeting
+                      </button>
+                    )}
+                    {profile.txHash && (
                       <a
                         href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${profile.txHash}`}
                         target="_blank"
@@ -2279,7 +2316,7 @@ export default function Network() {
                           color: '#0066cc',
                           textDecoration: 'none',
                           fontWeight: '500',
-                          padding: '6px 12px',
+                          padding: '8px 12px',
                           backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
                           borderRadius: '6px',
                           border: `1px solid ${darkMode ? '#2a5a7a' : '#b3d9ff'}`,
@@ -2300,13 +2337,325 @@ export default function Network() {
                         title="Click to open in explorer (copies hash to clipboard)">
                         View on Arkiv Explorer ↗
                       </a>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         </section>
+      )}
+
+      {/* Request Meeting Modal */}
+      {requestMeetingModal.open && requestMeetingModal.profile && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setRequestMeetingModal({ open: false, profile: null });
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: theme.cardBg,
+              borderRadius: '12px',
+              padding: '32px',
+              maxWidth: '500px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${theme.border}`
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '24px' }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '24px',
+                fontWeight: '600',
+                color: theme.text,
+                marginBottom: '8px'
+              }}>
+                Request Meeting
+              </h2>
+              <p style={{
+                margin: 0,
+                fontSize: '14px',
+                color: theme.textSecondary
+              }}>
+                Schedule a mentorship session with {requestMeetingModal.profile.displayName || shortenWallet(requestMeetingModal.profile.wallet)}
+              </p>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!userWallet) {
+                  alert('Please connect your wallet first');
+                  return;
+                }
+
+                const formData = new FormData(e.currentTarget);
+                const date = formData.get('date') as string;
+                const time = formData.get('time') as string;
+                const skill = formData.get('skill') as string;
+                const duration = formData.get('duration') as string;
+                const notes = formData.get('notes') as string;
+
+                if (!date || !time || !skill) {
+                  alert('Please fill in date, time, and skill');
+                  return;
+                }
+
+                // Combine date and time into ISO string
+                const sessionDate = new Date(`${date}T${time}`).toISOString();
+
+                // Determine mentor/learner: if target has mentor roles, they're mentor; if user has mentor roles, they're mentor; otherwise default to target as mentor
+                const targetHasMentorRoles = requestMeetingModal.profile.mentorRoles && requestMeetingModal.profile.mentorRoles.length > 0;
+                const userHasMentorRoles = userProfile?.mentorRoles && userProfile.mentorRoles.length > 0;
+                
+                let mentorWallet: string;
+                let learnerWallet: string;
+                
+                if (targetHasMentorRoles && !userHasMentorRoles) {
+                  // Target is mentor, user is learner
+                  mentorWallet = requestMeetingModal.profile.wallet;
+                  learnerWallet = userWallet;
+                } else if (userHasMentorRoles && !targetHasMentorRoles) {
+                  // User is mentor, target is learner
+                  mentorWallet = userWallet;
+                  learnerWallet = requestMeetingModal.profile.wallet;
+                } else {
+                  // Default: target is mentor (they're being requested)
+                  mentorWallet = requestMeetingModal.profile.wallet;
+                  learnerWallet = userWallet;
+                }
+
+                setSubmittingMeeting(true);
+                try {
+                  const res = await fetch('/api/me', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'createSession',
+                      wallet: userWallet,
+                      mentorWallet,
+                      learnerWallet,
+                      skill,
+                      sessionDate,
+                      duration: duration || '60',
+                      notes: notes || '',
+                    }),
+                  });
+
+                  const data = await res.json();
+                  if (!res.ok) {
+                    throw new Error(data.error || 'Failed to create session');
+                  }
+
+                  alert(`Meeting requested successfully! Transaction: ${data.txHash ? shortenHash(data.txHash) : 'pending'}`);
+                  setRequestMeetingModal({ open: false, profile: null });
+                  
+                  // Refresh network data to show new session
+                  fetchNetwork();
+                } catch (err: any) {
+                  console.error('Error creating session:', err);
+                  alert(`Error: ${err.message || 'Failed to request meeting'}`);
+                } finally {
+                  setSubmittingMeeting(false);
+                }
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Skill *</span>
+                  <input
+                    type="text"
+                    name="skill"
+                    required
+                    defaultValue={requestMeetingModal.profile.skillsArray?.[0] || requestMeetingModal.profile.skills?.split(',')[0] || ''}
+                    placeholder="e.g. solidity, react, design"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Date *</span>
+                    <input
+                      type="date"
+                      name="date"
+                      required
+                      min={new Date().toISOString().split('T')[0]}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                        transition: 'all 0.2s',
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                    />
+                  </label>
+
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Time *</span>
+                    <input
+                      type="time"
+                      name="time"
+                      required
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${theme.inputBorder}`,
+                        backgroundColor: theme.inputBg,
+                        color: theme.text,
+                        fontSize: '14px',
+                        transition: 'all 0.2s',
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                    />
+                  </label>
+                </div>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Duration (minutes)</span>
+                  <input
+                    type="number"
+                    name="duration"
+                    defaultValue="60"
+                    min="15"
+                    max="240"
+                    step="15"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Notes (optional)</span>
+                  <textarea
+                    name="notes"
+                    rows={4}
+                    placeholder="Any additional details about the session..."
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: `1px solid ${theme.inputBorder}`,
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      fontSize: '14px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      transition: 'all 0.2s',
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = theme.inputBorder}
+                  />
+                </label>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRequestMeetingModal({ open: false, profile: null })}
+                    disabled={submittingMeeting}
+                    style={{
+                      flex: 1,
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      backgroundColor: theme.hoverBg,
+                      color: theme.text,
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: '6px',
+                      cursor: submittingMeeting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: submittingMeeting ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = darkMode ? '#404040' : '#e0e0e0';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = theme.hoverBg;
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingMeeting}
+                    style={{
+                      flex: 1,
+                      padding: '12px 24px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      backgroundColor: submittingMeeting ? '#999' : '#0066cc',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: submittingMeeting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: submittingMeeting ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = '#0052a3';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!submittingMeeting) {
+                        e.currentTarget.style.backgroundColor = '#0066cc';
+                      }
+                    }}
+                  >
+                    {submittingMeeting ? 'Requesting...' : 'Request Meeting'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Upcoming Meetings Section */}
