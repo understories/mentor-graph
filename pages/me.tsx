@@ -1015,32 +1015,238 @@ export default function Me() {
                   )}
                 </div>
 
-                {/* Skills / Roles */}
+                {/* RPG Skill Tree */}
                 <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${theme.borderLight}` }}>
-                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '12px', fontSize: '18px' }}>Skills & Roles</h3>
-                  <div style={{ marginBottom: '8px', color: theme.text }}>
-                    <strong style={{ color: theme.textSecondary }}>Skills:</strong> {data.profile.skills || (data.profile.skillsArray ? data.profile.skillsArray.join(', ') : 'None')}
+                  <h3 style={{ color: theme.text, marginTop: 0, marginBottom: '16px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>⚔️</span>
+                    <span>Skill Tree</span>
+                  </h3>
+                  
+                  {(() => {
+                    // Build skill tree data
+                    const skills = data.profile.skillsArray || (data.profile.skills ? data.profile.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+                    const skillUsage = new Map(data.profile.topSkillsUsage?.map(item => [item.skill.toLowerCase(), item.count]) || []);
+                    
+                    // Calculate skill levels (0-100) based on usage
+                    const skillLevels = new Map<string, number>();
+                    skills.forEach(skill => {
+                      const usage = skillUsage.get(skill.toLowerCase()) || 0;
+                      // Level = min(100, usage * 10) - scale usage to 0-100
+                      const level = Math.min(100, usage * 10);
+                      skillLevels.set(skill, level);
+                    });
+                    
+                    // Group skills into tree branches (by first letter or category)
+                    const skillGroups: { [key: string]: string[] } = {};
+                    skills.forEach(skill => {
+                      const category = skill.charAt(0).toUpperCase();
+                      if (!skillGroups[category]) skillGroups[category] = [];
+                      skillGroups[category].push(skill);
+                    });
+                    
+                    const categories = Object.keys(skillGroups).sort();
+                    
+                    return (
+                      <div style={{
+                        position: 'relative',
+                        minHeight: '400px',
+                        padding: '40px 20px',
+                        backgroundColor: darkMode ? '#0a0a0a' : '#f5f5f5',
+                        borderRadius: '12px',
+                        border: `2px solid ${darkMode ? '#4a4a4a' : '#ddd'}`,
+                        backgroundImage: darkMode 
+                          ? `radial-gradient(circle at 20% 50%, rgba(76, 175, 80, 0.1) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 80%, rgba(156, 39, 176, 0.1) 0%, transparent 50%)`
+                          : `radial-gradient(circle at 20% 50%, rgba(76, 175, 80, 0.05) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 80%, rgba(156, 39, 176, 0.05) 0%, transparent 50%)`,
+                        overflow: 'auto'
+                      }}>
+                        <svg 
+                          width="100%" 
+                          height="100%" 
+                          style={{ 
+                            position: 'absolute', 
+                            top: 0, 
+                            left: 0,
+                            pointerEvents: 'none',
+                            zIndex: 0
+                          }}
+                        >
+                          {/* Draw connecting lines between skills in same category */}
+                          {categories.map((category, catIdx) => {
+                            const categorySkills = skillGroups[category];
+                            return categorySkills.map((skill, skillIdx) => {
+                              if (skillIdx === 0) return null;
+                              const prevSkill = categorySkills[skillIdx - 1];
+                              const x1 = 120 + (catIdx * 200);
+                              const y1 = 80 + (skillIdx - 1) * 120;
+                              const x2 = 120 + (catIdx * 200);
+                              const y2 = 80 + skillIdx * 120;
+                              return (
+                                <line
+                                  key={`${category}-${skillIdx}`}
+                                  x1={x1}
+                                  y1={y1}
+                                  x2={x2}
+                                  y2={y2}
+                                  stroke={darkMode ? '#4a4a4a' : '#ccc'}
+                                  strokeWidth="2"
+                                  strokeDasharray="5,5"
+                                  opacity="0.5"
+                                />
+                              );
+                            }).filter(Boolean);
+                          })}
+                        </svg>
+                        
+                        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexWrap: 'wrap', gap: '40px', justifyContent: 'flex-start' }}>
+                          {categories.map((category, catIdx) => (
+                            <div key={category} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                              {skillGroups[category].map((skill, skillIdx) => {
+                                const level = skillLevels.get(skill) || 0;
+                                const isUnlocked = level > 0 || skillIdx === 0; // First skill always unlocked
+                                const levelInt = Math.floor(level);
+                                
+                                return (
+                                  <div
+                                    key={skill}
+                                    style={{
+                                      position: 'relative',
+                                      width: '120px',
+                                      height: '120px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: isUnlocked
+                                        ? (darkMode 
+                                            ? `radial-gradient(circle, ${levelInt > 50 ? '#4caf50' : '#90c695'} 0%, #2d4a2d 100%)`
+                                            : `radial-gradient(circle, ${levelInt > 50 ? '#d4edda' : '#f0f9f0'} 0%, #ffffff 100%)`)
+                                        : (darkMode ? '#1a1a1a' : '#e0e0e0'),
+                                      border: `3px solid ${isUnlocked 
+                                        ? (levelInt > 50 ? '#ffd700' : levelInt > 25 ? '#ffa500' : '#90c695')
+                                        : '#666'}`,
+                                      borderRadius: '50%',
+                                      boxShadow: isUnlocked && levelInt > 50
+                                        ? `0 0 20px ${darkMode ? 'rgba(255, 215, 0, 0.5)' : 'rgba(255, 215, 0, 0.3)'}`
+                                        : '0 4px 12px rgba(0, 0, 0, 0.2)',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.3s ease',
+                                      opacity: isUnlocked ? 1 : 0.5
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (isUnlocked) {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.boxShadow = `0 0 30px ${darkMode ? 'rgba(255, 215, 0, 0.7)' : 'rgba(255, 215, 0, 0.5)'}`;
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (isUnlocked) {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                        e.currentTarget.style.boxShadow = isUnlocked && levelInt > 50
+                                          ? `0 0 20px ${darkMode ? 'rgba(255, 215, 0, 0.5)' : 'rgba(255, 215, 0, 0.3)'}`
+                                          : '0 4px 12px rgba(0, 0, 0, 0.2)';
+                                      }
+                                    }}
+                                    title={`${skill} - Level ${levelInt}`}
+                                  >
+                                    <div style={{
+                                      fontSize: '24px',
+                                      marginBottom: '4px',
+                                      filter: isUnlocked ? 'none' : 'grayscale(100%)'
+                                    }}>
+                                      {levelInt > 50 ? '⭐' : levelInt > 25 ? '✨' : '🌱'}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '11px',
+                                      fontWeight: 'bold',
+                                      color: isUnlocked ? theme.text : theme.textSecondary,
+                                      textAlign: 'center',
+                                      padding: '0 4px',
+                                      textTransform: 'capitalize'
+                                    }}>
+                                      {skill.length > 10 ? skill.substring(0, 8) + '...' : skill}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '18px',
+                                      fontWeight: 'bold',
+                                      color: isUnlocked 
+                                        ? (levelInt > 50 ? '#ffd700' : levelInt > 25 ? '#ffa500' : '#4caf50')
+                                        : '#666',
+                                      marginTop: '4px'
+                                    }}>
+                                      {levelInt}
+                                    </div>
+                                    {isUnlocked && (
+                                      <div style={{
+                                        position: 'absolute',
+                                        bottom: '-8px',
+                                        width: '80px',
+                                        height: '4px',
+                                        backgroundColor: darkMode ? '#2a2a2a' : '#e0e0e0',
+                                        borderRadius: '2px',
+                                        overflow: 'hidden'
+                                      }}>
+                                        <div style={{
+                                          width: `${levelInt}%`,
+                                          height: '100%',
+                                          background: levelInt > 50 
+                                            ? 'linear-gradient(90deg, #ffd700, #ffa500)'
+                                            : levelInt > 25
+                                            ? 'linear-gradient(90deg, #ffa500, #4caf50)'
+                                            : 'linear-gradient(90deg, #4caf50, #90c695)',
+                                          transition: 'width 0.3s ease',
+                                          boxShadow: `0 0 8px ${levelInt > 50 ? '#ffd700' : '#4caf50'}`
+                                        }} />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {skills.length === 0 && (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '60px 20px',
+                            color: theme.textSecondary,
+                            fontSize: '14px'
+                          }}>
+                            No skills unlocked yet. Add skills to your profile to start your journey! 🌱
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Additional info */}
+                  <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: theme.textSecondary }}>
+                    {data.profile.seniority && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Class:</strong> {data.profile.seniority}
+                      </div>
+                    )}
+                    {data.profile.domainsOfInterest && data.profile.domainsOfInterest.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Domains:</strong> {data.profile.domainsOfInterest.slice(0, 3).join(', ')}
+                        {data.profile.domainsOfInterest.length > 3 && '...'}
+                      </div>
+                    )}
+                    {data.profile.mentorRoles && data.profile.mentorRoles.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Mentor:</strong> {data.profile.mentorRoles.slice(0, 2).join(', ')}
+                        {data.profile.mentorRoles.length > 2 && '...'}
+                      </div>
+                    )}
+                    {data.profile.learnerRoles && data.profile.learnerRoles.length > 0 && (
+                      <div style={{ padding: '6px 12px', backgroundColor: theme.hoverBg, borderRadius: '6px', border: `1px solid ${theme.borderLight}` }}>
+                        <strong>Learner:</strong> {data.profile.learnerRoles.slice(0, 2).join(', ')}
+                        {data.profile.learnerRoles.length > 2 && '...'}
+                      </div>
+                    )}
                   </div>
-                  {data.profile.seniority && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Seniority:</strong> {data.profile.seniority}
-                    </div>
-                  )}
-                  {data.profile.domainsOfInterest && data.profile.domainsOfInterest.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Domains of Interest:</strong> {data.profile.domainsOfInterest.join(', ')}
-                    </div>
-                  )}
-                  {data.profile.mentorRoles && data.profile.mentorRoles.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Mentor Roles:</strong> {data.profile.mentorRoles.join(', ')}
-                    </div>
-                  )}
-                  {data.profile.learnerRoles && data.profile.learnerRoles.length > 0 && (
-                    <div style={{ marginBottom: '8px', color: theme.text }}>
-                      <strong style={{ color: theme.textSecondary }}>Learner Roles:</strong> {data.profile.learnerRoles.join(', ')}
-                    </div>
-                  )}
                 </div>
 
                 {/* Reputation Panel */}
