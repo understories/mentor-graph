@@ -121,6 +121,11 @@ export default function Network() {
   const [requestMeetingModal, setRequestMeetingModal] = useState<{ open: boolean; profile: any | null }>({ open: false, profile: null });
   const [submittingMeeting, setSubmittingMeeting] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showProfiles, setShowProfiles] = useState(false);
+  const [showMeetings, setShowMeetings] = useState(false);
+  const [showAsks, setShowAsks] = useState(false);
+  const [showOffers, setShowOffers] = useState(false);
   const [viewMode, setViewMode] = useState<'matches' | 'skills' | 'wallets' | 'all'>('all');
   const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const [, setNow] = useState(Date.now());
@@ -964,26 +969,58 @@ export default function Network() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Collapsible */}
       <section style={{ 
         marginBottom: '24px', 
-        padding: '20px', 
         border: `1px solid ${theme.border}`, 
-        borderRadius: '8px', 
+        borderRadius: '12px', 
         backgroundColor: theme.cardBg,
         boxShadow: theme.shadow,
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        overflow: 'hidden'
       }}>
-        <h3 style={{ 
-          marginTop: 0, 
-          marginBottom: '16px', 
-          fontSize: '16px', 
-          fontWeight: '600', 
-          color: theme.text 
-        }}>
-          Filters
-        </h3>
-        <form onSubmit={handleApplyFilter}>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          style={{
+            width: '100%',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = theme.hoverBg;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>🔍</span>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: '18px', 
+              fontWeight: '600', 
+              color: theme.text 
+            }}>
+              Filters
+            </h3>
+          </div>
+          <span style={{ 
+            fontSize: '20px',
+            transform: showFilters ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.3s ease'
+          }}>
+            ▼
+          </span>
+        </button>
+        {showFilters && (
+          <div style={{ padding: '0 20px 20px 20px' }}>
+            <form onSubmit={handleApplyFilter}>
           {/* Row 1: Basic Filters */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1335,6 +1372,8 @@ export default function Network() {
             </button>
           </div>
         </form>
+          </div>
+        )}
       </section>
 
       {/* Main Content: Web Visualization + Analytics Sidebar */}
@@ -1998,41 +2037,84 @@ export default function Network() {
         )}
       </div>
 
-      {/* Profile Matches Section */}
+      {/* Profile Matches Section - Collapsible */}
       {profiles.length > 0 && (
         <section style={{ 
-          marginBottom: '32px', 
-          padding: '28px', 
+          marginBottom: '24px', 
           border: `1px solid ${theme.border}`, 
           borderRadius: '12px',
           backgroundColor: theme.cardBg,
           boxShadow: theme.shadow,
-          transition: 'all 0.3s ease'
+          transition: 'all 0.3s ease',
+          overflow: 'hidden'
         }}>
-          <div style={{ 
-            marginBottom: '24px',
-            paddingBottom: '16px',
-            borderBottom: `2px solid ${theme.borderLight}`
-          }}>
-            <h2 style={{ 
-              margin: 0,
-              fontSize: '22px',
-              fontWeight: '600',
-              color: theme.text,
-              transition: 'color 0.3s ease'
-            }}>
-              Profile Matches ({profiles.length})
-            </h2>
-            <p style={{ 
-              margin: '8px 0 0 0',
-              fontSize: '14px',
-              color: theme.textSecondary,
-              transition: 'color 0.3s ease'
-            }}>
-              Profiles matching your filters • Skills, reputation, and availability
-            </p>
-          </div>
-          <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+          <button
+            onClick={() => setShowProfiles(!showProfiles)}
+            style={{
+              width: '100%',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme.hoverBg;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '28px' }}>👤</span>
+              <div style={{ textAlign: 'left' }}>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Profile Matches
+                </h2>
+                <p style={{ 
+                  margin: '4px 0 0 0',
+                  fontSize: '12px',
+                  color: theme.textSecondary,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Skills, reputation, and availability
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{
+                fontSize: '20px',
+                fontWeight: '700',
+                color: '#0066cc',
+                backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                minWidth: '40px',
+                textAlign: 'center'
+              }}>
+                {profiles.length}
+              </span>
+              <span style={{ 
+                fontSize: '20px',
+                transform: showProfiles ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s ease'
+              }}>
+                ▼
+              </span>
+            </div>
+          </button>
+          {showProfiles && (
+            <div style={{ padding: '0 20px 20px 20px' }}>
+              <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {profiles.map((profile) => {
               // Compute match score based on skill overlap with user
               const profileSkills = profile.skillsArray || (profile.skills ? profile.skills.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean) : []);
@@ -2344,7 +2426,9 @@ export default function Network() {
                 </div>
               );
             })}
-          </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -2692,38 +2776,81 @@ export default function Network() {
 
         return (
           <section style={{ 
-            marginBottom: '32px', 
-            padding: '28px', 
+            marginBottom: '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
             boxShadow: theme.shadow,
-            transition: 'all 0.3s ease'
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
           }}>
-            <div style={{ 
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: `2px solid ${theme.borderLight}`
-            }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '22px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Upcoming Meetings ({upcomingSessions.length})
-              </h2>
-              <p style={{ 
-                margin: '8px 0 0 0',
-                fontSize: '14px',
-                color: theme.textSecondary,
-                transition: 'color 0.3s ease'
-              }}>
-                Scheduled and in-progress sessions across the network
-              </p>
-            </div>
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <button
+              onClick={() => setShowMeetings(!showMeetings)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>📅</span>
+                <div style={{ textAlign: 'left' }}>
+                  <h2 style={{ 
+                    margin: 0,
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: theme.text,
+                    transition: 'color 0.3s ease'
+                  }}>
+                    Upcoming Meetings
+                  </h2>
+                  <p style={{ 
+                    margin: '4px 0 0 0',
+                    fontSize: '12px',
+                    color: theme.textSecondary,
+                    transition: 'color 0.3s ease'
+                  }}>
+                    Scheduled and in-progress sessions
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#0066cc',
+                  backgroundColor: darkMode ? '#1a3a5a' : '#e7f3ff',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {upcomingSessions.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showMeetings ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showMeetings && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
               {upcomingSessions.map((session) => {
                 const sessionTime = new Date(session.sessionDate);
                 const isToday = sessionTime.toDateString() === new Date().toDateString();
@@ -3110,39 +3237,82 @@ export default function Network() {
                   </div>
                 );
               })}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
         );
       })()}
 
-      {/* Detailed Lists Below */}
-      <div style={{ marginTop: '32px' }}>
+      {/* Detailed Lists Below - Collapsible */}
+      <div style={{ marginTop: '24px' }}>
         {displayedAsks.length > 0 && (
           <section style={{ 
-            marginBottom: '32px', 
-            padding: '28px', 
+            marginBottom: '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
             boxShadow: theme.shadow,
-            transition: 'all 0.3s ease'
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
           }}>
-            <div style={{ 
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: `2px solid ${theme.borderLight}`
-            }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '22px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Open Asks ({displayedAsks.length})
-              </h2>
-            </div>
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <button
+              onClick={() => setShowAsks(!showAsks)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>❓</span>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Open Asks
+                </h2>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#ef5350',
+                  backgroundColor: darkMode ? '#4a2525' : '#ffebee',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {displayedAsks.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showAsks ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showAsks && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
               {displayedAsks.map((ask) => (
                 <div 
                   key={ask.key} 
@@ -3242,36 +3412,79 @@ export default function Network() {
                   )}
                 </div>
               ))}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
         {displayedOffers.length > 0 && (
           <section style={{ 
-            marginBottom: '32px', 
-            padding: '28px', 
+            marginBottom: '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
             boxShadow: theme.shadow,
-            transition: 'all 0.3s ease'
+            transition: 'all 0.3s ease',
+            overflow: 'hidden'
           }}>
-            <div style={{ 
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: `2px solid ${theme.borderLight}`
-            }}>
-              <h2 style={{ 
-                margin: 0,
-                fontSize: '22px',
-                fontWeight: '600',
-                color: theme.text,
-                transition: 'color 0.3s ease'
-              }}>
-                Active Offers ({displayedOffers.length})
-              </h2>
-            </div>
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <button
+              onClick={() => setShowOffers(!showOffers)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.hoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '28px' }}>💎</span>
+                <h2 style={{ 
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: theme.text,
+                  transition: 'color 0.3s ease'
+                }}>
+                  Active Offers
+                </h2>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  fontSize: '20px',
+                  fontWeight: '700',
+                  color: '#4caf50',
+                  backgroundColor: darkMode ? '#1a3a1a' : '#e8f5e9',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  minWidth: '40px',
+                  textAlign: 'center'
+                }}>
+                  {displayedOffers.length}
+                </span>
+                <span style={{ 
+                  fontSize: '20px',
+                  transform: showOffers ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease'
+                }}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            {showOffers && (
+              <div style={{ padding: '0 20px 20px 20px' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
               {displayedOffers.map((offer) => (
                 <div 
                   key={offer.key} 
@@ -3378,7 +3591,9 @@ export default function Network() {
                   )}
                 </div>
               ))}
-            </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </div>
