@@ -1348,6 +1348,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Skill</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
                 value={skillFilter}
                 onChange={(e) => setSkillFilter(e.target.value)}
                 placeholder="e.g. solidity"
@@ -1369,6 +1373,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Name / Username</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="name"
                 value={nameSearchFilter}
                 onChange={(e) => setNameSearchFilter(e.target.value)}
                 placeholder="Search by name or username"
@@ -1467,6 +1475,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Mentor Role</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="off"
                 value={mentorRoleFilter}
                 onChange={(e) => setMentorRoleFilter(e.target.value)}
                 placeholder="e.g. technical mentor"
@@ -1488,6 +1500,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Learner Role</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="off"
                 value={learnerRoleFilter}
                 onChange={(e) => setLearnerRoleFilter(e.target.value)}
                 placeholder="e.g. product manager"
@@ -1509,6 +1525,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Reputation Score</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minReputationFilter}
                 onChange={(e) => setMinReputationFilter(e.target.value)}
                 placeholder="e.g. 50"
@@ -1531,6 +1549,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Sessions</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minSessionsFilter}
                 onChange={(e) => setMinSessionsFilter(e.target.value)}
                 placeholder="e.g. 5"
@@ -1556,6 +1576,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Rating (1-5)</span>
               <input
                 type="number"
+                inputMode="decimal"
+                autoComplete="off"
                 value={minRatingFilter}
                 onChange={(e) => setMinRatingFilter(e.target.value)}
                 placeholder="e.g. 3.0"
@@ -1580,6 +1602,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Max Rating (1-5)</span>
               <input
                 type="number"
+                inputMode="decimal"
+                autoComplete="off"
                 value={maxRatingFilter}
                 onChange={(e) => setMaxRatingFilter(e.target.value)}
                 placeholder="e.g. 5.0"
@@ -1604,6 +1628,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min NPS Score (0-10)</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minNpsFilter}
                 onChange={(e) => setMinNpsFilter(e.target.value)}
                 placeholder="e.g. 7"
@@ -2982,6 +3008,8 @@ export default function Network() {
                     <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Date *</span>
                     <input
                       type="date"
+                      inputMode="none"
+                      autoComplete="off"
                       name="date"
                       required
                       min={new Date().toISOString().split('T')[0]}
@@ -2991,7 +3019,7 @@ export default function Network() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                         transition: 'all 0.2s',
                       }}
                       onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -3003,6 +3031,8 @@ export default function Network() {
                     <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Time *</span>
                     <input
                       type="time"
+                      inputMode="none"
+                      autoComplete="off"
                       name="time"
                       required
                       style={{
@@ -3011,7 +3041,7 @@ export default function Network() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                         transition: 'all 0.2s',
                       }}
                       onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -3024,6 +3054,8 @@ export default function Network() {
                   <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Duration (minutes)</span>
                   <input
                     type="number"
+                    inputMode="numeric"
+                    autoComplete="off"
                     name="duration"
                     defaultValue="60"
                     min="15"
@@ -3047,6 +3079,10 @@ export default function Network() {
                   <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Notes (optional)</span>
                   <textarea
                     name="notes"
+                    inputMode="text"
+                    autoCapitalize="sentences"
+                    autoCorrect="on"
+                    autoComplete="off"
                     rows={4}
                     placeholder="Any additional details about the session..."
                     style={{

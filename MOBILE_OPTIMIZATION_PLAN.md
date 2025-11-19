@@ -32,6 +32,7 @@ This document outlines a comprehensive engineering plan to optimize MentorGraph 
 | 3.3.3 Typography Scaling | ✅ Completed | All form inputs (modals and filters) updated to 16px font size to prevent iOS zoom. Modal typography scales responsively. |
 | 3.2.2 Touch Target Size Enforcement | ✅ Completed (Critical) | Created `src/utils/touchTargets.ts` utility. Updated dark mode toggles, zoom controls, reset button, and view mode buttons to meet 44x44px minimum. |
 | 3.2.3 Touch Feedback & Hover Alternatives | ✅ Completed (Critical) | Created `src/hooks/useTouchFeedback.ts` hook. Updated dark mode toggles, zoom controls, and reset button with touch feedback. Created reusable button components. |
+| 3.5.3 Mobile-Optimized Forms | ✅ Completed | Added `inputMode`, `autoCapitalize`, `autoCorrect`, and `autoComplete` attributes to all form inputs across network page, modals, and profile forms. All inputs now show appropriate mobile keyboards. |
 
 ---
 
@@ -649,27 +650,68 @@ const MobileNav = () => {
 **Priority:** High  
 **Effort:** 3-4 hours
 
+**Status:** ✅ Completed
+
 **Implementation:**
+Added mobile-optimized attributes to all form inputs:
+
 ```typescript
-// Optimize input types for mobile keyboards
+// Number inputs - show numeric keyboard
 <input
-  type="email" // Shows email keyboard
-  inputMode="numeric" // Shows numeric keyboard
+  type="number"
+  inputMode="numeric" // or "decimal" for decimals
   autoComplete="off"
+/>
+
+// Text inputs - appropriate capitalization
+<input
+  type="text"
+  inputMode="text"
+  autoCapitalize="words" // or "off", "sentences", "none"
+  autoCorrect="off" // or "on" for text areas
+  autoComplete="name" // or "username", "url", etc.
+/>
+
+// URL inputs - show URL keyboard
+<input
+  type="url"
+  inputMode="url"
+  autoCapitalize="none"
   autoCorrect="off"
-  autoCapitalize="off"
-  style={{
-    fontSize: '16px', // Prevents iOS zoom
-    padding: '12px',
-    width: '100%',
-  }}
+  autoComplete="url"
+/>
+
+// Date/Time inputs - prevent keyboard
+<input
+  type="date"
+  inputMode="none"
+  autoComplete="off"
 />
 ```
 
+**Updated Elements:**
+- ✅ Network page filter inputs (all text, number, select)
+- ✅ Request Meeting Modal (skill, date, time, duration, notes)
+- ✅ Profile edit form (displayName, username, URLs, bios, timezone, languages, contact links)
+- ✅ Ask/Offer creation forms (skill, message, expiration inputs)
+
+**Input Mode Mappings:**
+- `inputMode="numeric"`: Integer number inputs (reputation, sessions, NPS)
+- `inputMode="decimal"`: Decimal number inputs (ratings, expiration)
+- `inputMode="text"`: Regular text inputs
+- `inputMode="url"`: URL inputs (profile image)
+- `inputMode="none"`: Date/time inputs (native pickers)
+
+**Auto-capitalization:**
+- `autoCapitalize="words"`: Names, roles, languages
+- `autoCapitalize="sentences"`: Bios, messages, notes
+- `autoCapitalize="none"`: Skills, usernames, URLs, timezone
+
 **Reasoning:**
 - Shows appropriate keyboard (email, numeric, etc.)
-- Prevents iOS zoom on focus
-- Better mobile form UX
+- Prevents iOS zoom on focus (16px font size)
+- Better mobile form UX with smart capitalization
+- Proper autocomplete hints for better UX
 
 ### 3.6 Phase 6: Accessibility & Testing
 

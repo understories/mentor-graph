@@ -1566,6 +1566,10 @@ export default function Me() {
                     </label>
                     <input
                       type="text"
+                      inputMode="text"
+                      autoCapitalize="words"
+                      autoCorrect="off"
+                      autoComplete="name"
                       name="displayName"
                       defaultValue={data.profile.displayName}
                       required
@@ -1576,7 +1580,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1586,6 +1590,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Username</label>
                     <input
                       type="text"
+                      inputMode="text"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="username"
                       name="username"
                       defaultValue={data.profile.username || ''}
                       placeholder="e.g. @alice"
@@ -1596,7 +1604,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1606,6 +1614,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Profile Image URL</label>
                     <input
                       type="url"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="url"
                       name="profileImage"
                       defaultValue={data.profile.profileImage || ''}
                       placeholder="https://..."
@@ -1616,7 +1628,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1626,6 +1638,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Short Bio</label>
                     <input
                       type="text"
+                      inputMode="text"
+                      autoCapitalize="sentences"
+                      autoCorrect="on"
+                      autoComplete="off"
                       name="bioShort"
                       defaultValue={data.profile.bioShort || data.profile.bio || ''}
                       placeholder="Brief description"
@@ -1636,7 +1652,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1646,6 +1662,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Long Bio</label>
                     <textarea
                       name="bioLong"
+                      inputMode="text"
+                      autoCapitalize="sentences"
+                      autoCorrect="on"
+                      autoComplete="off"
                       defaultValue={data.profile.bioLong || ''}
                       placeholder="Detailed description"
                       rows={4}
@@ -1656,7 +1676,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                         fontFamily: 'inherit',
                         resize: 'vertical',
                       }}
@@ -1668,6 +1688,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Timezone</label>
                     <input
                       type="text"
+                      inputMode="text"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      autoComplete="off"
                       name="timezone"
                       defaultValue={data.profile.timezone}
                       placeholder="e.g. UTC-5, America/New_York"
@@ -1678,7 +1702,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1688,6 +1712,10 @@ export default function Me() {
                     <label style={{ color: theme.text, display: 'block', marginBottom: '4px' }}>Languages (comma-separated)</label>
                     <input
                       type="text"
+                      inputMode="text"
+                      autoCapitalize="words"
+                      autoCorrect="off"
+                      autoComplete="off"
                       name="languages"
                       defaultValue={data.profile.languages ? data.profile.languages.join(', ') : ''}
                       placeholder="e.g. English, Spanish, French"
@@ -1698,7 +1726,7 @@ export default function Me() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                       }}
                     />
                     <ImmutableCaution darkMode={darkMode} />
@@ -1709,6 +1737,10 @@ export default function Me() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                       <input
                         type="text"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        autoComplete="username"
                         name="contactTwitter"
                         defaultValue={data.profile.contactLinks?.twitter || ''}
                         placeholder="Twitter/X handle"
@@ -1718,11 +1750,15 @@ export default function Me() {
                           border: `1px solid ${theme.inputBorder}`,
                           backgroundColor: theme.inputBg,
                           color: theme.text,
-                          fontSize: '14px',
+                          fontSize: '16px', // Prevents iOS zoom
                         }}
                       />
                       <input
                         type="text"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        autoComplete="username"
                         name="contactGithub"
                         defaultValue={data.profile.contactLinks?.github || ''}
                         placeholder="GitHub username"
@@ -1732,11 +1768,15 @@ export default function Me() {
                           border: `1px solid ${theme.inputBorder}`,
                           backgroundColor: theme.inputBg,
                           color: theme.text,
-                          fontSize: '14px',
+                          fontSize: '16px', // Prevents iOS zoom
                         }}
                       />
                       <input
                         type="text"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        autoComplete="username"
                         name="contactTelegram"
                         defaultValue={data.profile.contactLinks?.telegram || ''}
                         placeholder="Telegram handle"
@@ -1746,11 +1786,15 @@ export default function Me() {
                           border: `1px solid ${theme.inputBorder}`,
                           backgroundColor: theme.inputBg,
                           color: theme.text,
-                          fontSize: '14px',
+                          fontSize: '16px', // Prevents iOS zoom
                         }}
                       />
                       <input
                         type="text"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        autoComplete="username"
                         name="contactDiscord"
                         defaultValue={data.profile.contactLinks?.discord || ''}
                         placeholder="Discord username"
@@ -1760,7 +1804,7 @@ export default function Me() {
                           border: `1px solid ${theme.inputBorder}`,
                           backgroundColor: theme.inputBg,
                           color: theme.text,
-                          fontSize: '14px',
+                          fontSize: '16px', // Prevents iOS zoom
                         }}
                       />
                     </div>
@@ -2608,6 +2652,10 @@ export default function Me() {
             </label>
             <input 
               type="text" 
+              inputMode="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
               name="skill" 
               required 
               style={{ 
@@ -2617,6 +2665,7 @@ export default function Me() {
                 border: `1px solid ${theme.inputBorder}`,
                 backgroundColor: theme.inputBg,
                 color: theme.text,
+                fontSize: '16px', // Prevents iOS zoom
               }} 
             />
           </div>
@@ -2626,6 +2675,10 @@ export default function Me() {
             </label>
             <input 
               type="text" 
+              inputMode="text"
+              autoCapitalize="sentences"
+              autoCorrect="on"
+              autoComplete="off"
               name="message" 
               required 
               style={{ 
@@ -2635,6 +2688,7 @@ export default function Me() {
                 border: `1px solid ${theme.inputBorder}`,
                 backgroundColor: theme.inputBg,
                 color: theme.text,
+                fontSize: '16px', // Prevents iOS zoom
               }} 
             />
           </div>
@@ -2643,6 +2697,8 @@ export default function Me() {
               Expiration (default: 1 hour):
               <input 
                 type="number" 
+                inputMode="decimal"
+                autoComplete="off"
                 name="expiresIn" 
                 min="0.1" 
                 step="0.1" 
@@ -2655,6 +2711,7 @@ export default function Me() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
+                  fontSize: '16px', // Prevents iOS zoom
                 }} 
               />
               <select 
@@ -2667,6 +2724,7 @@ export default function Me() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
+                  fontSize: '16px', // Prevents iOS zoom
                 }}
               >
                 <option value="seconds">seconds</option>
@@ -2838,6 +2896,10 @@ export default function Me() {
             </label>
             <input 
               type="text" 
+              inputMode="text"
+              autoCapitalize="sentences"
+              autoCorrect="on"
+              autoComplete="off"
               name="message" 
               required 
               style={{ 
@@ -2847,6 +2909,7 @@ export default function Me() {
                 border: `1px solid ${theme.inputBorder}`,
                 backgroundColor: theme.inputBg,
                 color: theme.text,
+                fontSize: '16px', // Prevents iOS zoom
               }} 
             />
           </div>
@@ -2856,6 +2919,10 @@ export default function Me() {
             </label>
             <input 
               type="text" 
+              inputMode="text"
+              autoCapitalize="sentences"
+              autoCorrect="on"
+              autoComplete="off"
               name="availabilityWindow" 
               required 
               style={{ 
@@ -2865,6 +2932,7 @@ export default function Me() {
                 border: `1px solid ${theme.inputBorder}`,
                 backgroundColor: theme.inputBg,
                 color: theme.text,
+                fontSize: '16px', // Prevents iOS zoom
               }} 
             />
           </div>
@@ -2873,6 +2941,8 @@ export default function Me() {
               Expiration (default: 2 hours):
               <input 
                 type="number" 
+                inputMode="decimal"
+                autoComplete="off"
                 name="expiresIn" 
                 min="0.1" 
                 step="0.1" 
@@ -2885,6 +2955,7 @@ export default function Me() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
+                  fontSize: '16px', // Prevents iOS zoom
                 }} 
               />
               <select 
@@ -2897,6 +2968,7 @@ export default function Me() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
+                  fontSize: '16px', // Prevents iOS zoom
                 }}
               >
                 <option value="seconds">seconds</option>
