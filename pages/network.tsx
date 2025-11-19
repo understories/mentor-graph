@@ -129,6 +129,10 @@ export default function Network() {
   const [darkMode, setDarkMode] = useState(false);
   
   // Set dark mode from localStorage after mount to avoid hydration mismatch
+  const clampZoom = (value: number) => Math.max(0.5, Math.min(2, value));
+  const getTouchDistance = (touch1: Touch | React.Touch, touch2: Touch | React.Touch) =>
+    Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
@@ -154,6 +158,8 @@ export default function Network() {
   const [zoom, setZoom] = useState(1);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [clickedNodeId, setClickedNodeId] = useState<string | null>(null);
+  const [pinchStartDistance, setPinchStartDistance] = useState<number | null>(null);
+  const [pinchStartZoom, setPinchStartZoom] = useState(1);
 
   useEffect(() => {
     // Get connected wallet from localStorage (same as /me page)
@@ -541,6 +547,62 @@ export default function Network() {
     return { x: defaultX, y: defaultY };
   };
 
+  const updateDragFromPoint = (clientX: number, clientY: number, currentTarget?: HTMLElement | null) => {
+    if (panning && panStart) {
+      setPanOffset({
+        x: clientX - panStart.x,
+        y: clientY - panStart.y
+      });
+      return;
+    }
+
+    if (dragStartPos && clickedNodeId && !draggingNode) {
+      const dx = clientX - dragStartPos.x;
+      const dy = clientY - dragStartPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > 5) {
+        const container = currentTarget?.closest('[data-container]') as HTMLElement
+          || document.querySelector('[data-container]') as HTMLElement;
+        if (container && clickedNodeId) {
+          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+          if (clickedNode) {
+            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+            const containerRect = container.getBoundingClientRect();
+
+            const mouseX = dragStartPos.x - containerRect.left;
+            const mouseY = dragStartPos.y - containerRect.top;
+            const nodeCenterX = nodePos.x * zoom + panOffset.x;
+            const nodeCenterY = nodePos.y * zoom + panOffset.y;
+
+            setDragOffset({
+              x: mouseX - nodeCenterX,
+              y: mouseY - nodeCenterY,
+            });
+            setDraggingNode(clickedNodeId);
+          }
+        }
+      }
+    }
+
+    if (!draggingNode || !dragOffset) return;
+
+    const container = currentTarget?.closest('[data-container]') as HTMLElement
+      || document.querySelector('[data-container]') as HTMLElement;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const mouseX = clientX - containerRect.left;
+    const mouseY = clientY - containerRect.top;
+    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
+
+    setNodePositions(prev => ({
+      ...prev,
+      [draggingNode]: { x: newX, y: newY },
+    }));
+  };
+
   // Handle pan start (on container background)
   const handlePanStart = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
@@ -575,59 +637,8 @@ export default function Network() {
   };
 
   // Handle drag - check if mouse moved enough to start dragging
-  const handleDrag = (e: React.MouseEvent) => {
-    if (panning && panStart) {
-      handlePanMove(e);
-      return;
-    }
-    
-    // If we have a drag start position but haven't started dragging yet, check if we should start
-    if (dragStartPos && clickedNodeId && !draggingNode) {
-      const dx = e.clientX - dragStartPos.x;
-      const dy = e.clientY - dragStartPos.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Only start dragging if mouse moved more than 5 pixels
-      if (distance > 5) {
-        const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
-        if (container && clickedNodeId) {
-          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
-          if (clickedNode) {
-            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
-            const containerRect = container.getBoundingClientRect();
-            
-            // Calculate the offset from mouse to node center at drag start
-            const mouseX = dragStartPos.x - containerRect.left;
-            const mouseY = dragStartPos.y - containerRect.top;
-            const nodeCenterX = nodePos.x * zoom + panOffset.x;
-            const nodeCenterY = nodePos.y * zoom + panOffset.y;
-            
-            setDragOffset({ 
-              x: mouseX - nodeCenterX, 
-              y: mouseY - nodeCenterY 
-            });
-            setDraggingNode(clickedNodeId);
-          }
-        }
-      }
-    }
-    
-    if (!draggingNode || !dragOffset) return;
-    
-    const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
-    if (!container) return;
-    
-    const containerRect = container.getBoundingClientRect();
-    // Calculate new position: mouse position minus offset, then account for pan/zoom
-    const mouseX = e.clientX - containerRect.left;
-    const mouseY = e.clientY - containerRect.top;
-    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
-    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
-    
-    setNodePositions(prev => ({
-      ...prev,
-      [draggingNode]: { x: newX, y: newY }
-    }));
+  const handleDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    updateDragFromPoint(e.clientX, e.clientY, e.currentTarget);
   };
 
   // Handle drag end
@@ -644,14 +655,64 @@ export default function Network() {
       setDragStartPos(null);
       setClickedNodeId(null);
     }
+    setPinchStartDistance(null);
   };
 
   // Handle zoom with mouse wheel
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(2, zoom * delta));
+    const newZoom = clampZoom(zoom * delta);
     setZoom(newZoom);
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, nodeId: string) => {
+    if (e.touches.length === 1) {
+      e.stopPropagation();
+      const touch = e.touches[0];
+      setDragStartPos({ x: touch.clientX, y: touch.clientY });
+      setClickedNodeId(nodeId);
+    }
+  };
+
+  const handleTouchStartContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      setPinchStartDistance(getTouchDistance(e.touches[0], e.touches[1]));
+      setPinchStartZoom(zoom);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+        setPanning(true);
+        setPanStart({ x: touch.clientX - panOffset.x, y: touch.clientY - panOffset.y });
+      }
+    }
+  };
+
+  const handleTouchMoveContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && pinchStartDistance) {
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      const scale = distance / pinchStartDistance;
+      setZoom(clampZoom(pinchStartZoom * scale));
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      updateDragFromPoint(touch.clientX, touch.clientY, e.currentTarget);
+    }
+  };
+
+  const handleTouchEndContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) {
+      handleDragEnd();
+      setPinchStartDistance(null);
+    } else if (e.touches.length === 1) {
+      setPinchStartDistance(null);
+      setPinchStartZoom(zoom);
+    }
   };
 
   // Add global mouse event listeners for dragging and panning
@@ -1752,7 +1813,8 @@ export default function Network() {
                 height: '600px', 
                 marginTop: '16px',
                 cursor: panning ? 'grabbing' : (draggingNode ? 'grabbing' : 'grab'),
-                overflow: 'hidden'
+                overflow: 'hidden',
+                touchAction: 'none'
               }}
               onMouseDown={(e) => {
                 // Start panning if clicking on container background
@@ -1768,6 +1830,9 @@ export default function Network() {
               onMouseMove={handleDrag}
               onMouseUp={handleDragEnd}
               onWheel={handleWheel}
+              onTouchStart={handleTouchStartContainer}
+              onTouchMove={handleTouchMoveContainer}
+              onTouchEnd={handleTouchEndContainer}
             >
               {displayedNodes.slice(0, 50).map((node) => {
                 const nodePos = getNodePosition(node.id, node.x, node.y);
@@ -1831,6 +1896,7 @@ export default function Network() {
                         handleDragStart(e, node.id, nodePos.x, nodePos.y);
                       }
                     }}
+                    onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
                     onMouseEnter={(e) => {
                       if (!isDragging) {
                         e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)';

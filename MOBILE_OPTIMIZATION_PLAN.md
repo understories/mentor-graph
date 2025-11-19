@@ -26,6 +26,7 @@ This document outlines a comprehensive engineering plan to optimize MentorGraph 
 | --- | --- | --- |
 | 3.1.1 Viewport Meta Tag | ✅ Completed | Added global viewport meta tag via `pages/_app.tsx` with fallback `_document.tsx` wrapper. Dev server restarted and verified on mobile emulator. |
 | 3.1.2 Mobile-First Tokens | ✅ Completed | Created shared responsive tokens in `src/styles/responsive.ts` (breakpoints, spacing, typography, touch targets) to guide future refactors. |
+| 3.2.1 Touch Interaction Enhancements | ✅ Completed | Added touch/pinch handlers for the network web: pan, drag, pinch-to-zoom, touch target safeguards, `touchAction: 'none'`. |
 
 ---
 
@@ -257,57 +258,47 @@ export const touchTargets = {
 #### 3.2.1 Touch Event Handlers for Network Graph
 **Priority:** Critical  
 **Effort:** 4-6 hours
+  
+**Status:** ✅ Completed (`pages/network.tsx`)
 
-**Current Issue:**
-Network graph only supports mouse events, making it unusable on mobile.
+**Current Issue (resolved):**
+Network graph only supported mouse events, making it unusable on mobile.
 
 **Implementation:**
 ```typescript
-// pages/network.tsx
-const handleTouchStart = (e: React.TouchEvent) => {
-  if (e.touches.length === 1) {
-    // Single touch - start drag/pan
-    setPanning(true);
-    setPanStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-  } else if (e.touches.length === 2) {
-    // Two touches - start pinch zoom
-    const touch1 = e.touches[0];
-    const touch2 = e.touches[1];
-    const distance = Math.hypot(
-      touch2.clientX - touch1.clientX,
-      touch2.clientY - touch1.clientY
-    );
-    setPinchStartDistance(distance);
+const clampZoom = (value: number) => Math.max(0.5, Math.min(2, value));
+const getTouchDistance = (a: Touch | React.Touch, b: Touch | React.Touch) =>
+  Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+
+const handleTouchStartContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+  if (e.touches.length === 2) {
+    setPinchStartDistance(getTouchDistance(e.touches[0], e.touches[1]));
     setPinchStartZoom(zoom);
+    return;
+  }
+  if (e.touches.length === 1 && e.target === e.currentTarget) {
+    setPanning(true);
+    setPanStart({ x: e.touches[0].clientX - panOffset.x, y: e.touches[0].clientY - panOffset.y });
   }
 };
 
-const handleTouchMove = (e: React.TouchEvent) => {
-  e.preventDefault(); // Prevent scrolling
-  if (e.touches.length === 1 && panning) {
-    // Single touch drag
-    const deltaX = e.touches[0].clientX - panStart.x;
-    const deltaY = e.touches[0].clientY - panStart.y;
-    setPanOffset({
-      x: panOffset.x + deltaX / zoom,
-      y: panOffset.y + deltaY / zoom,
-    });
-    setPanStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-  } else if (e.touches.length === 2 && pinchStartDistance) {
-    // Pinch zoom
-    const touch1 = e.touches[0];
-    const touch2 = e.touches[1];
-    const distance = Math.hypot(
-      touch2.clientX - touch1.clientX,
-      touch2.clientY - touch1.clientY
-    );
+const handleTouchMoveContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+  if (e.touches.length === 2 && pinchStartDistance) {
+    const distance = getTouchDistance(e.touches[0], e.touches[1]);
     const scale = distance / pinchStartDistance;
-    setZoom(Math.max(0.5, Math.min(3, pinchStartZoom * scale)));
+    setZoom(clampZoom(pinchStartZoom * scale));
+    return;
+  }
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    updateDragFromPoint(touch.clientX, touch.clientY, e.currentTarget);
   }
 };
 
-const handleTouchEnd = () => {
-  setPanning(false);
+const handleTouchEndContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+  if (e.touches.length === 0) {
+    handleDragEnd();
+  }
   setPinchStartDistance(null);
 };
 ```
