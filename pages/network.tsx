@@ -524,20 +524,62 @@ export default function Network() {
     ? webNodes 
     : webNodes.filter(n => typeFilter === 'asks' ? n.type === 'ask' : n.type === 'offer');
 
-  // Initialize node positions if not set
+  // Track if we've centered the view initially
+  const [hasCenteredView, setHasCenteredView] = useState(false);
+
+  // Initialize node positions if not set and center view on nodes
   useEffect(() => {
     if (displayedNodes.length > 0) {
       const initialPositions: Record<string, { x: number; y: number }> = {};
+      let hasNewNodes = false;
       displayedNodes.forEach(node => {
         if (!nodePositions[node.id]) {
           initialPositions[node.id] = { x: node.x, y: node.y };
+          hasNewNodes = true;
         }
       });
-      if (Object.keys(initialPositions).length > 0) {
+      if (hasNewNodes) {
         setNodePositions(prev => ({ ...prev, ...initialPositions }));
       }
+      
+      // Center view on nodes when first loaded (only once)
+      if (!hasCenteredView && displayedNodes.length > 0) {
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          const container = document.querySelector('[data-container]') as HTMLElement;
+          if (container) {
+            const allPositions = { ...nodePositions, ...initialPositions };
+            const positions = displayedNodes.map(n => allPositions[n.id] || { x: n.x, y: n.y });
+            
+            if (positions.length > 0) {
+              // Calculate bounding box of all nodes
+              const minX = Math.min(...positions.map(p => p.x));
+              const maxX = Math.max(...positions.map(p => p.x));
+              const minY = Math.min(...positions.map(p => p.y));
+              const maxY = Math.max(...positions.map(p => p.y));
+              
+              // Calculate center of nodes
+              const centerX = (minX + maxX) / 2;
+              const centerY = (minY + maxY) / 2;
+              
+              // Get actual container dimensions
+              const containerRect = container.getBoundingClientRect();
+              const containerWidth = containerRect.width;
+              const containerHeight = containerRect.height;
+              
+              // Center the view on the nodes
+              // We want the center of nodes to be at the center of the container
+              setPanOffset({
+                x: containerWidth / 2 - centerX,
+                y: containerHeight / 2 - centerY
+              });
+              setHasCenteredView(true);
+            }
+          }
+        }, 100);
+      }
     }
-  }, [displayedNodes.map(n => n.id).join(',')]);
+  }, [displayedNodes.map(n => n.id).join(','), hasCenteredView, nodePositions]);
 
   // Get current position for a node
   const getNodePosition = (nodeId: string, defaultX: number, defaultY: number) => {
