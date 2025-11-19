@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { iconButtonStyle, compactButtonStyle } from '../src/utils/touchTargets';
+import { useTouchFeedback, getPressedStyle } from '../src/hooks/useTouchFeedback';
 
 type Ask = {
   key: string;
@@ -99,6 +101,92 @@ function shortenWallet(wallet: string): string {
   return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
 }
 
+// Dark Mode Toggle Button Component with Touch Feedback
+function DarkModeToggleButton({ darkMode, setDarkMode, theme }: { darkMode: boolean; setDarkMode: (value: boolean) => void; theme: any }) {
+  const { pressed, handlers } = useTouchFeedback();
+  const baseStyle: React.CSSProperties = {
+    ...iconButtonStyle,
+    fontSize: '18px',
+    fontWeight: '500',
+    backgroundColor: darkMode ? '#4a4a4a' : '#f0f0f0',
+    color: darkMode ? '#ffffff' : '#495057',
+    border: '1px solid ' + theme.border,
+    borderRadius: '6px',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    transition: 'all 0.1s ease',
+  };
+
+  const pressedStyle: Partial<React.CSSProperties> = {
+    backgroundColor: darkMode ? '#5a5a5a' : '#e0e0e0',
+  };
+
+  return (
+    <button
+      onClick={() => setDarkMode(!darkMode)}
+      {...handlers}
+      style={getPressedStyle(baseStyle, pressed, pressedStyle)}
+      title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {darkMode ? '☀️' : '🌙'}
+    </button>
+  );
+}
+
+// Zoom Button Component with Touch Feedback
+function ZoomButton({ onClick, label, title, theme }: { onClick: () => void; label: string; title: string; theme: any }) {
+  const { pressed, handlers } = useTouchFeedback();
+  const baseStyle: React.CSSProperties = {
+    ...iconButtonStyle,
+    fontSize: '18px',
+    fontWeight: '600',
+    backgroundColor: theme.hoverBg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '4px',
+    color: theme.text,
+    cursor: 'pointer',
+    transition: 'all 0.1s ease',
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      {...handlers}
+      style={getPressedStyle(baseStyle, pressed)}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Reset Button Component with Touch Feedback
+function ResetButton({ onClick, theme }: { onClick: () => void; theme: any }) {
+  const { pressed, handlers } = useTouchFeedback();
+  const baseStyle: React.CSSProperties = {
+    ...compactButtonStyle,
+    fontSize: '12px',
+    backgroundColor: theme.hoverBg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '4px',
+    color: theme.text,
+    cursor: 'pointer',
+    marginTop: '4px',
+    transition: 'all 0.1s ease',
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      {...handlers}
+      style={getPressedStyle(baseStyle, pressed)}
+      title="Reset view"
+    >
+      Reset
+    </button>
+  );
+}
+
 export default function Network() {
   const router = useRouter();
   const [asks, setAsks] = useState<Ask[]>([]);
@@ -129,6 +217,10 @@ export default function Network() {
   const [darkMode, setDarkMode] = useState(false);
   
   // Set dark mode from localStorage after mount to avoid hydration mismatch
+  const clampZoom = (value: number) => Math.max(0.5, Math.min(2, value));
+  const getTouchDistance = (touch1: Touch | React.Touch, touch2: Touch | React.Touch) =>
+    Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
@@ -154,6 +246,20 @@ export default function Network() {
   const [zoom, setZoom] = useState(1);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [clickedNodeId, setClickedNodeId] = useState<string | null>(null);
+  const [pinchStartDistance, setPinchStartDistance] = useState<number | null>(null);
+  const [pinchStartZoom, setPinchStartZoom] = useState(1);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      if (typeof window !== 'undefined') {
+        setIsMobile(window.innerWidth < 768);
+      }
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
 
   useEffect(() => {
     // Get connected wallet from localStorage (same as /me page)
@@ -518,20 +624,62 @@ export default function Network() {
     ? webNodes 
     : webNodes.filter(n => typeFilter === 'asks' ? n.type === 'ask' : n.type === 'offer');
 
-  // Initialize node positions if not set
+  // Track if we've centered the view initially
+  const [hasCenteredView, setHasCenteredView] = useState(false);
+
+  // Initialize node positions if not set and center view on nodes
   useEffect(() => {
     if (displayedNodes.length > 0) {
       const initialPositions: Record<string, { x: number; y: number }> = {};
+      let hasNewNodes = false;
       displayedNodes.forEach(node => {
         if (!nodePositions[node.id]) {
           initialPositions[node.id] = { x: node.x, y: node.y };
+          hasNewNodes = true;
         }
       });
-      if (Object.keys(initialPositions).length > 0) {
+      if (hasNewNodes) {
         setNodePositions(prev => ({ ...prev, ...initialPositions }));
       }
+      
+      // Center view on nodes when first loaded (only once)
+      if (!hasCenteredView && displayedNodes.length > 0) {
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          const container = document.querySelector('[data-container]') as HTMLElement;
+          if (container) {
+            const allPositions = { ...nodePositions, ...initialPositions };
+            const positions = displayedNodes.map(n => allPositions[n.id] || { x: n.x, y: n.y });
+            
+            if (positions.length > 0) {
+              // Calculate bounding box of all nodes
+              const minX = Math.min(...positions.map(p => p.x));
+              const maxX = Math.max(...positions.map(p => p.x));
+              const minY = Math.min(...positions.map(p => p.y));
+              const maxY = Math.max(...positions.map(p => p.y));
+              
+              // Calculate center of nodes
+              const centerX = (minX + maxX) / 2;
+              const centerY = (minY + maxY) / 2;
+              
+              // Get actual container dimensions
+              const containerRect = container.getBoundingClientRect();
+              const containerWidth = containerRect.width;
+              const containerHeight = containerRect.height;
+              
+              // Center the view on the nodes
+              // We want the center of nodes to be at the center of the container
+              setPanOffset({
+                x: containerWidth / 2 - centerX,
+                y: containerHeight / 2 - centerY
+              });
+              setHasCenteredView(true);
+            }
+          }
+        }, 100);
+      }
     }
-  }, [displayedNodes.map(n => n.id).join(',')]);
+  }, [displayedNodes.map(n => n.id).join(','), hasCenteredView, nodePositions]);
 
   // Get current position for a node
   const getNodePosition = (nodeId: string, defaultX: number, defaultY: number) => {
@@ -539,6 +687,62 @@ export default function Network() {
       return nodePositions[nodeId];
     }
     return { x: defaultX, y: defaultY };
+  };
+
+  const updateDragFromPoint = (clientX: number, clientY: number, currentTarget?: HTMLElement | null) => {
+    if (panning && panStart) {
+      setPanOffset({
+        x: clientX - panStart.x,
+        y: clientY - panStart.y
+      });
+      return;
+    }
+
+    if (dragStartPos && clickedNodeId && !draggingNode) {
+      const dx = clientX - dragStartPos.x;
+      const dy = clientY - dragStartPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > 5) {
+        const container = currentTarget?.closest('[data-container]') as HTMLElement
+          || document.querySelector('[data-container]') as HTMLElement;
+        if (container && clickedNodeId) {
+          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
+          if (clickedNode) {
+            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
+            const containerRect = container.getBoundingClientRect();
+
+            const mouseX = dragStartPos.x - containerRect.left;
+            const mouseY = dragStartPos.y - containerRect.top;
+            const nodeCenterX = nodePos.x * zoom + panOffset.x;
+            const nodeCenterY = nodePos.y * zoom + panOffset.y;
+
+            setDragOffset({
+              x: mouseX - nodeCenterX,
+              y: mouseY - nodeCenterY,
+            });
+            setDraggingNode(clickedNodeId);
+          }
+        }
+      }
+    }
+
+    if (!draggingNode || !dragOffset) return;
+
+    const container = currentTarget?.closest('[data-container]') as HTMLElement
+      || document.querySelector('[data-container]') as HTMLElement;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const mouseX = clientX - containerRect.left;
+    const mouseY = clientY - containerRect.top;
+    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
+    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
+
+    setNodePositions(prev => ({
+      ...prev,
+      [draggingNode]: { x: newX, y: newY },
+    }));
   };
 
   // Handle pan start (on container background)
@@ -575,59 +779,8 @@ export default function Network() {
   };
 
   // Handle drag - check if mouse moved enough to start dragging
-  const handleDrag = (e: React.MouseEvent) => {
-    if (panning && panStart) {
-      handlePanMove(e);
-      return;
-    }
-    
-    // If we have a drag start position but haven't started dragging yet, check if we should start
-    if (dragStartPos && clickedNodeId && !draggingNode) {
-      const dx = e.clientX - dragStartPos.x;
-      const dy = e.clientY - dragStartPos.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Only start dragging if mouse moved more than 5 pixels
-      if (distance > 5) {
-        const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
-        if (container && clickedNodeId) {
-          const clickedNode = displayedNodes.find(node => node.id === clickedNodeId);
-          if (clickedNode) {
-            const nodePos = getNodePosition(clickedNode.id, clickedNode.x, clickedNode.y);
-            const containerRect = container.getBoundingClientRect();
-            
-            // Calculate the offset from mouse to node center at drag start
-            const mouseX = dragStartPos.x - containerRect.left;
-            const mouseY = dragStartPos.y - containerRect.top;
-            const nodeCenterX = nodePos.x * zoom + panOffset.x;
-            const nodeCenterY = nodePos.y * zoom + panOffset.y;
-            
-            setDragOffset({ 
-              x: mouseX - nodeCenterX, 
-              y: mouseY - nodeCenterY 
-            });
-            setDraggingNode(clickedNodeId);
-          }
-        }
-      }
-    }
-    
-    if (!draggingNode || !dragOffset) return;
-    
-    const container = (e.currentTarget as HTMLElement).closest('[data-container]') as HTMLElement;
-    if (!container) return;
-    
-    const containerRect = container.getBoundingClientRect();
-    // Calculate new position: mouse position minus offset, then account for pan/zoom
-    const mouseX = e.clientX - containerRect.left;
-    const mouseY = e.clientY - containerRect.top;
-    const newX = (mouseX - dragOffset.x - panOffset.x) / zoom;
-    const newY = (mouseY - dragOffset.y - panOffset.y) / zoom;
-    
-    setNodePositions(prev => ({
-      ...prev,
-      [draggingNode]: { x: newX, y: newY }
-    }));
+  const handleDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    updateDragFromPoint(e.clientX, e.clientY, e.currentTarget);
   };
 
   // Handle drag end
@@ -644,14 +797,64 @@ export default function Network() {
       setDragStartPos(null);
       setClickedNodeId(null);
     }
+    setPinchStartDistance(null);
   };
 
   // Handle zoom with mouse wheel
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(2, zoom * delta));
+    const newZoom = clampZoom(zoom * delta);
     setZoom(newZoom);
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, nodeId: string) => {
+    if (e.touches.length === 1) {
+      e.stopPropagation();
+      const touch = e.touches[0];
+      setDragStartPos({ x: touch.clientX, y: touch.clientY });
+      setClickedNodeId(nodeId);
+    }
+  };
+
+  const handleTouchStartContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      setPinchStartDistance(getTouchDistance(e.touches[0], e.touches[1]));
+      setPinchStartZoom(zoom);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+        setPanning(true);
+        setPanStart({ x: touch.clientX - panOffset.x, y: touch.clientY - panOffset.y });
+      }
+    }
+  };
+
+  const handleTouchMoveContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && pinchStartDistance) {
+      const distance = getTouchDistance(e.touches[0], e.touches[1]);
+      const scale = distance / pinchStartDistance;
+      setZoom(clampZoom(pinchStartZoom * scale));
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      updateDragFromPoint(touch.clientX, touch.clientY, e.currentTarget);
+    }
+  };
+
+  const handleTouchEndContainer = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) {
+      handleDragEnd();
+      setPinchStartDistance(null);
+    } else if (e.touches.length === 1) {
+      setPinchStartDistance(null);
+      setPinchStartZoom(zoom);
+    }
   };
 
   // Add global mouse event listeners for dragging and panning
@@ -1027,30 +1230,7 @@ export default function Network() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            style={{
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              backgroundColor: darkMode ? '#4a4a4a' : '#f0f0f0',
-              color: darkMode ? '#ffffff' : '#495057',
-              border: '1px solid ' + theme.border,
-              borderRadius: '6px',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = darkMode ? '#5a5a5a' : '#e0e0e0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = darkMode ? '#4a4a4a' : '#f0f0f0';
-            }}
-            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
+          <DarkModeToggleButton darkMode={darkMode} setDarkMode={setDarkMode} theme={theme} />
           <button
             onClick={() => setShowAnalytics(!showAnalytics)}
             style={{
@@ -1168,6 +1348,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Skill</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
                 value={skillFilter}
                 onChange={(e) => setSkillFilter(e.target.value)}
                 placeholder="e.g. solidity"
@@ -1177,7 +1361,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1189,6 +1373,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Name / Username</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="name"
                 value={nameSearchFilter}
                 onChange={(e) => setNameSearchFilter(e.target.value)}
                 placeholder="Search by name or username"
@@ -1198,7 +1386,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1215,7 +1403,7 @@ export default function Network() {
                   padding: '8px 12px', 
                   borderRadius: '6px', 
                   border: `1px solid ${theme.inputBorder}`,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   backgroundColor: theme.inputBg,
                   color: theme.text,
                   cursor: 'pointer',
@@ -1241,7 +1429,7 @@ export default function Network() {
                   padding: '8px 12px', 
                   borderRadius: '6px', 
                   border: `1px solid ${theme.inputBorder}`,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   backgroundColor: theme.inputBg,
                   color: theme.text,
                   cursor: 'pointer',
@@ -1265,7 +1453,7 @@ export default function Network() {
                   padding: '8px 12px', 
                   borderRadius: '6px', 
                   border: `1px solid ${theme.inputBorder}`,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   backgroundColor: theme.inputBg,
                   color: theme.text,
                   cursor: 'pointer',
@@ -1287,6 +1475,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Mentor Role</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="off"
                 value={mentorRoleFilter}
                 onChange={(e) => setMentorRoleFilter(e.target.value)}
                 placeholder="e.g. technical mentor"
@@ -1296,7 +1488,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1308,6 +1500,10 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Learner Role</span>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="off"
                 value={learnerRoleFilter}
                 onChange={(e) => setLearnerRoleFilter(e.target.value)}
                 placeholder="e.g. product manager"
@@ -1317,7 +1513,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1329,6 +1525,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Reputation Score</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minReputationFilter}
                 onChange={(e) => setMinReputationFilter(e.target.value)}
                 placeholder="e.g. 50"
@@ -1339,7 +1537,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1351,6 +1549,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Sessions</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minSessionsFilter}
                 onChange={(e) => setMinSessionsFilter(e.target.value)}
                 placeholder="e.g. 5"
@@ -1361,7 +1561,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1376,6 +1576,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min Rating (1-5)</span>
               <input
                 type="number"
+                inputMode="decimal"
+                autoComplete="off"
                 value={minRatingFilter}
                 onChange={(e) => setMinRatingFilter(e.target.value)}
                 placeholder="e.g. 3.0"
@@ -1388,7 +1590,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1400,6 +1602,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Max Rating (1-5)</span>
               <input
                 type="number"
+                inputMode="decimal"
+                autoComplete="off"
                 value={maxRatingFilter}
                 onChange={(e) => setMaxRatingFilter(e.target.value)}
                 placeholder="e.g. 5.0"
@@ -1412,7 +1616,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1424,6 +1628,8 @@ export default function Network() {
               <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Min NPS Score (0-10)</span>
               <input
                 type="number"
+                inputMode="numeric"
+                autoComplete="off"
                 value={minNpsFilter}
                 onChange={(e) => setMinNpsFilter(e.target.value)}
                 placeholder="e.g. 7"
@@ -1436,7 +1642,7 @@ export default function Network() {
                   border: `1px solid ${theme.inputBorder}`,
                   backgroundColor: theme.inputBg,
                   color: theme.text,
-                  fontSize: '14px',
+                  fontSize: '16px', // Prevents iOS zoom
                   transition: 'all 0.2s',
                 }}
                 onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -1518,27 +1724,35 @@ export default function Network() {
       </section>
 
       {/* Main Content: Web Visualization + Analytics Sidebar */}
-      <div style={{ display: 'flex', gap: '24px', position: 'relative', marginBottom: '32px' }}>
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '16px' : '24px', 
+        position: 'relative', 
+        marginBottom: isMobile ? '24px' : '32px' 
+      }}>
         {/* Web Visualization */}
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div style={{ flex: 1, position: 'relative', width: '100%' }}>
           <div style={{ 
             border: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)'}`, 
             borderRadius: '12px', 
             backgroundColor: darkMode ? '#0a0a0a' : '#1a1a1a',
-            padding: '24px',
-            minHeight: '640px',
+            padding: isMobile ? '16px' : '24px',
+            minHeight: isMobile ? '480px' : '640px',
             position: 'relative',
             overflow: 'hidden',
             boxShadow: darkMode ? '0 0 30px rgba(76, 175, 80, 0.2), inset 0 0 60px rgba(76, 175, 80, 0.05)' : '0 0 20px rgba(76, 175, 80, 0.15)',
             transition: 'all 0.3s ease'
           }}>
             <div style={{ 
-              marginBottom: '16px',
-              paddingBottom: '16px',
+              marginBottom: isMobile ? '12px' : '16px',
+              paddingBottom: isMobile ? '12px' : '16px',
               borderBottom: `1px solid ${darkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.15)'}`,
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
+              flexDirection: isMobile ? 'column' : 'row',
+              justifyContent: isMobile ? 'flex-start' : 'space-between',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              gap: isMobile ? '12px' : '0'
             }}>
               <div>
                 <h2 style={{ 
@@ -1568,8 +1782,8 @@ export default function Network() {
                       if (mode !== 'all') setFocusedNode(null);
                     }}
                     style={{
-                      padding: '6px 12px',
-                      fontSize: '12px',
+                      ...compactButtonStyle,
+                      fontSize: '13px',
                       fontWeight: '500',
                       borderRadius: '6px',
                       border: `1px solid ${viewMode === mode ? '#0066cc' : theme.border}`,
@@ -1597,11 +1811,11 @@ export default function Network() {
             </div>
             <svg 
               width="100%" 
-              height="600" 
+              height={isMobile ? 480 : 600} 
               style={{ 
                 position: 'absolute', 
-                top: '80px', 
-                left: '24px', 
+                top: isMobile ? '72px' : '80px', 
+                left: isMobile ? '16px' : '24px', 
                 pointerEvents: 'none',
                 zIndex: 0
               }}
@@ -1672,8 +1886,8 @@ export default function Network() {
             {/* Zoom Controls */}
             <div style={{
               position: 'absolute',
-              top: '90px',
-              right: '24px',
+              top: isMobile ? '78px' : '90px',
+              right: isMobile ? '12px' : '24px',
               zIndex: 100,
               display: 'flex',
               flexDirection: 'column',
@@ -1684,21 +1898,12 @@ export default function Network() {
               border: `1px solid ${theme.border}`,
               boxShadow: theme.shadow
             }}>
-              <button
+              <ZoomButton
                 onClick={() => setZoom(prev => Math.min(2, prev + 0.1))}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '14px',
-                  backgroundColor: theme.hoverBg,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: '4px',
-                  color: theme.text,
-                  cursor: 'pointer'
-                }}
+                label="+"
                 title="Zoom in"
-              >
-                +
-              </button>
+                theme={theme}
+              />
               <div style={{
                 padding: '4px 8px',
                 fontSize: '12px',
@@ -1707,40 +1912,19 @@ export default function Network() {
               }}>
                 {Math.round(zoom * 100)}%
               </div>
-              <button
+              <ZoomButton
                 onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '14px',
-                  backgroundColor: theme.hoverBg,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: '4px',
-                  color: theme.text,
-                  cursor: 'pointer'
-                }}
+                label="−"
                 title="Zoom out"
-              >
-                −
-              </button>
-              <button
+                theme={theme}
+              />
+              <ResetButton
                 onClick={() => {
                   setPanOffset({ x: 0, y: 0 });
                   setZoom(1);
                 }}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '11px',
-                  backgroundColor: theme.hoverBg,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: '4px',
-                  color: theme.text,
-                  cursor: 'pointer',
-                  marginTop: '4px'
-                }}
-                title="Reset view"
-              >
-                Reset
-              </button>
+                theme={theme}
+              />
             </div>
 
             {/* Render nodes */}
@@ -1749,10 +1933,11 @@ export default function Network() {
               style={{ 
                 position: 'relative', 
                 width: '100%', 
-                height: '600px', 
-                marginTop: '16px',
+                height: isMobile ? '480px' : '600px', 
+                marginTop: isMobile ? '12px' : '16px',
                 cursor: panning ? 'grabbing' : (draggingNode ? 'grabbing' : 'grab'),
-                overflow: 'hidden'
+                overflow: 'hidden',
+                touchAction: 'none'
               }}
               onMouseDown={(e) => {
                 // Start panning if clicking on container background
@@ -1768,6 +1953,9 @@ export default function Network() {
               onMouseMove={handleDrag}
               onMouseUp={handleDragEnd}
               onWheel={handleWheel}
+              onTouchStart={handleTouchStartContainer}
+              onTouchMove={handleTouchMoveContainer}
+              onTouchEnd={handleTouchEndContainer}
             >
               {displayedNodes.slice(0, 50).map((node) => {
                 const nodePos = getNodePosition(node.id, node.x, node.y);
@@ -1787,8 +1975,8 @@ export default function Network() {
                       left: `${transformedX}px`,
                       top: `${transformedY}px`,
                       transform: `translate(-50%, -50%) scale(${zoom})`,
-                      width: '120px',
-                      height: '120px',
+                      width: isMobile ? '96px' : '120px',
+                      height: isMobile ? '96px' : '120px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -1831,6 +2019,7 @@ export default function Network() {
                         handleDragStart(e, node.id, nodePos.x, nodePos.y);
                       }
                     }}
+                    onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
                     onMouseEnter={(e) => {
                       if (!isDragging) {
                         e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)';
@@ -1896,13 +2085,13 @@ export default function Network() {
         {/* Analytics Sidebar */}
         {showAnalytics && (
           <div style={{ 
-            width: '320px', 
-            padding: '24px', 
+            width: isMobile ? '100%' : '320px', 
+            padding: isMobile ? '16px' : '24px', 
             border: `1px solid ${theme.border}`, 
             borderRadius: '12px',
             backgroundColor: theme.cardBg,
-            maxHeight: '640px',
-            overflowY: 'auto',
+            maxHeight: isMobile ? '100%' : '640px',
+            overflowY: isMobile ? 'visible' : 'auto',
             boxShadow: theme.shadow,
             transition: 'all 0.3s ease'
           }}>
@@ -2654,10 +2843,10 @@ export default function Network() {
             bottom: 0,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: isMobile ? 'flex-end' : 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: isMobile ? '0' : '20px'
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -2668,21 +2857,25 @@ export default function Network() {
           <div
             style={{
               backgroundColor: theme.cardBg,
-              borderRadius: '12px',
-              padding: '32px',
-              maxWidth: '500px',
+              borderRadius: isMobile ? '20px 20px 0 0' : '12px',
+              padding: isMobile ? '24px 20px' : '32px',
+              maxWidth: isMobile ? '100%' : '500px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: isMobile ? '90vh' : '80vh',
               overflowY: 'auto',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              border: `1px solid ${theme.border}`
+              border: `1px solid ${theme.border}`,
+              // Swipe down indicator for mobile
+              ...(isMobile && {
+                borderTop: '4px solid rgba(76, 175, 80, 0.3)',
+              })
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: isMobile ? '20px' : '24px' }}>
               <h2 style={{
                 margin: 0,
-                fontSize: '24px',
+                fontSize: isMobile ? '20px' : '24px',
                 fontWeight: '600',
                 color: theme.text,
                 marginBottom: '8px'
@@ -2691,7 +2884,7 @@ export default function Network() {
               </h2>
               <p style={{
                 margin: 0,
-                fontSize: '14px',
+                fontSize: isMobile ? '13px' : '14px',
                 color: theme.textSecondary
               }}>
                 Schedule a mentorship session with {requestMeetingModal.profile.displayName || shortenWallet(requestMeetingModal.profile.wallet)}
@@ -2802,7 +2995,7 @@ export default function Network() {
                       border: `1px solid ${theme.inputBorder}`,
                       backgroundColor: theme.inputBg,
                       color: theme.text,
-                      fontSize: '14px',
+                      fontSize: '16px', // Prevents iOS zoom
                       transition: 'all 0.2s',
                     }}
                     onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -2810,11 +3003,13 @@ export default function Network() {
                   />
                 </label>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Date *</span>
                     <input
                       type="date"
+                      inputMode="none"
+                      autoComplete="off"
                       name="date"
                       required
                       min={new Date().toISOString().split('T')[0]}
@@ -2824,7 +3019,7 @@ export default function Network() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                         transition: 'all 0.2s',
                       }}
                       onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -2836,6 +3031,8 @@ export default function Network() {
                     <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Time *</span>
                     <input
                       type="time"
+                      inputMode="none"
+                      autoComplete="off"
                       name="time"
                       required
                       style={{
@@ -2844,7 +3041,7 @@ export default function Network() {
                         border: `1px solid ${theme.inputBorder}`,
                         backgroundColor: theme.inputBg,
                         color: theme.text,
-                        fontSize: '14px',
+                        fontSize: '16px', // Prevents iOS zoom
                         transition: 'all 0.2s',
                       }}
                       onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -2857,6 +3054,8 @@ export default function Network() {
                   <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Duration (minutes)</span>
                   <input
                     type="number"
+                    inputMode="numeric"
+                    autoComplete="off"
                     name="duration"
                     defaultValue="60"
                     min="15"
@@ -2868,7 +3067,7 @@ export default function Network() {
                       border: `1px solid ${theme.inputBorder}`,
                       backgroundColor: theme.inputBg,
                       color: theme.text,
-                      fontSize: '14px',
+                      fontSize: '16px', // Prevents iOS zoom
                       transition: 'all 0.2s',
                     }}
                     onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
@@ -2880,6 +3079,10 @@ export default function Network() {
                   <span style={{ fontSize: '13px', fontWeight: '500', color: theme.textSecondary }}>Notes (optional)</span>
                   <textarea
                     name="notes"
+                    inputMode="text"
+                    autoCapitalize="sentences"
+                    autoCorrect="on"
+                    autoComplete="off"
                     rows={4}
                     placeholder="Any additional details about the session..."
                     style={{
@@ -2888,7 +3091,7 @@ export default function Network() {
                       border: `1px solid ${theme.inputBorder}`,
                       backgroundColor: theme.inputBg,
                       color: theme.text,
-                      fontSize: '14px',
+                      fontSize: '16px', // Prevents iOS zoom
                       fontFamily: 'inherit',
                       resize: 'vertical',
                       transition: 'all 0.2s',
