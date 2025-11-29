@@ -123,7 +123,7 @@ export async function listOffers(params?: { skill?: string; spaceId?: string }):
     }
   });
 
-  let offers = offerResult.entities.map((entity: any) => {
+  let offers = result.entities.map((entity: any) => {
     let payload: any = {};
     try {
       if (entity.payload) {
