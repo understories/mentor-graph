@@ -14,13 +14,29 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ ok: false, error: 'No wallet address provided' });
       }
       
-      const [profile, asks, offers, sessions, feedback] = await Promise.all([
+      // Use Promise.allSettled to handle timeouts gracefully
+      const results = await Promise.allSettled([
         getProfileByWallet(wallet),
         listAsksForWallet(wallet),
         listOffersForWallet(wallet),
         listSessionsForWallet(wallet),
         listFeedbackForWallet(wallet),
       ]);
+
+      // Extract results, defaulting to empty arrays/null on failure
+      const profile = results[0].status === 'fulfilled' ? results[0].value : null;
+      const asks = results[1].status === 'fulfilled' ? results[1].value : [];
+      const offers = results[2].status === 'fulfilled' ? results[2].value : [];
+      const sessions = results[3].status === 'fulfilled' ? results[3].value : [];
+      const feedback = results[4].status === 'fulfilled' ? results[4].value : [];
+
+      // Log any failures for debugging
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const names = ['profile', 'asks', 'offers', 'sessions', 'feedback'];
+          console.error(`Failed to fetch ${names[index]}:`, result.reason);
+        }
+      });
 
       // Compute reputation metadata from sessions and feedback
       const sessionsCompleted = sessions.filter(s => s.status === 'completed').length;
