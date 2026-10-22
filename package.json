@@ -7,8 +7,8 @@
     "@waku/sdk": "^0.0.31",
     "contentful": "^10.6.4",
     "dotenv": "^16.4.5",
-    "next": "^15.5.7",
-    "protobufjs": "^7.5.2",
+    "next": "^15.5.28",
+    "protobufjs": "^7.6.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -21,5 +21,10 @@
     "start": "next start",
     "seed": "npx tsx scripts/seedDummyData.ts",
     "seed:simple": "npx tsx scripts/seedSimple.ts"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.31"
+    }
   }
 }
